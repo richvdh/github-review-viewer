@@ -173,7 +173,7 @@ export async function getCommentThreads(
                       bodyHTML
                       commit { id }
                       createdAt
-                      resourcePath
+                      url
                     }
                   }
                   originalLine
@@ -217,7 +217,7 @@ export async function getCommentThreads(
                     bodyHTML: respComment.bodyHTML,
                     commit_id: respComment.commit!.id,
                     created_at: respComment.createdAt,
-                    html_url: "https://github.com" + respComment.resourcePath,
+                    html_url: respComment.url,
                     user: actorToGithubUser(respComment.author!),
                 };
                 thread.comments.push(comment);
