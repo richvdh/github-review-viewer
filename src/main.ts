@@ -1,4 +1,4 @@
-import './style.css'
-import { renderApp } from './ui'
+import "./style.css";
+import { renderApp } from "./ui";
 
-renderApp(document.getElementById('app')!)
+renderApp(document.getElementById("app")!);

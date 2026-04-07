@@ -1,197 +1,47 @@
 import {
-  parsePRUrl,
-  fetchPRData,
-  groupIntoThreads,
-  type PRData,
-  type CommentThread,
-  type Review,
-  type ReviewComment,
-} from './github'
-
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  return d.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
-// Very basic markdown → HTML: bold, italic, inline code, code blocks, links
-function renderMarkdown(md: string): string {
-  if (!md) return ''
-  let html = escapeHtml(md)
-  // Code blocks
-  html = html.replace(/```[\s\S]*?```/g, (match) => {
-    const inner = match.slice(3, -3).replace(/^[^\n]*\n?/, '')
-    return `<pre class="md-code-block"><code>${inner}</code></pre>`
-  })
-  // Inline code
-  html = html.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>')
-  // Bold
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-  // Italic
-  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>')
-  // Links
-  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-  // Newlines → <br>
-  html = html.replace(/\n/g, '<br>')
-  return html
-}
-
-function renderDiffHunk(hunk: string): string {
-  const lines = hunk.split('\n')
-  const rendered = lines.map(line => {
-    let cls = 'diff-line'
-    if (line.startsWith('+')) cls += ' diff-add'
-    else if (line.startsWith('-')) cls += ' diff-remove'
-    else if (line.startsWith('@@')) cls += ' diff-meta'
-    return `<div class="${cls}">${escapeHtml(line)}</div>`
-  }).join('')
-  return `<div class="diff-hunk">${rendered}</div>`
-}
-
-function renderComment(comment: ReviewComment, isReply = false): string {
-  return `
-    <div class="comment ${isReply ? 'comment--reply' : ''}">
-      <div class="comment-header">
-        <a href="${comment.user.html_url}" target="_blank" rel="noopener" class="comment-author">
-          <img src="${comment.user.avatar_url}&s=40" alt="${escapeHtml(comment.user.login)}" class="avatar" width="20" height="20" />
-          <span class="username">${escapeHtml(comment.user.login)}</span>
-        </a>
-        <span class="comment-date">${formatDate(comment.created_at)}</span>
-        <a href="${comment.html_url}" target="_blank" rel="noopener" class="comment-link" title="View on GitHub">
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M7.775 3.275a.75.75 0 001.06 1.06l1.25-1.25a2 2 0 112.83 2.83l-2.5 2.5a2 2 0 01-2.83 0 .75.75 0 00-1.06 1.06 3.5 3.5 0 004.95 0l2.5-2.5a3.5 3.5 0 00-4.95-4.95l-1.25 1.25zm-4.69 9.64a2 2 0 010-2.83l2.5-2.5a2 2 0 012.83 0 .75.75 0 001.06-1.06 3.5 3.5 0 00-4.95 0l-2.5 2.5a3.5 3.5 0 004.95 4.95l1.25-1.25a.75.75 0 00-1.06-1.06l-1.25 1.25a2 2 0 01-2.83 0z"/></svg>
-        </a>
-      </div>
-      <div class="comment-body">${renderMarkdown(comment.body)}</div>
-    </div>
-  `
-}
-
-function renderThread(thread: CommentThread, index: number): string {
-  const lineInfo = thread.line ? `<span class="thread-line">L${thread.line}</span>` : ''
-  const replyCount = thread.replies.length
-  const replyLabel = replyCount > 0 ? `<span class="thread-reply-count">${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</span>` : ''
-
-  const repliesHtml = thread.replies.map(r => renderComment(r, true)).join('')
-  const hasReplies = thread.replies.length > 0
-
-  return `
-    <div class="thread" style="animation-delay: ${index * 40}ms">
-      <div class="thread-header">
-        <span class="thread-path">${escapeHtml(thread.path)}</span>
-        ${lineInfo}
-        ${replyLabel}
-      </div>
-      <details class="diff-details" ${index < 3 ? '' : ''}>
-        <summary class="diff-summary">View diff context</summary>
-        ${renderDiffHunk(thread.root.diff_hunk)}
-      </details>
-      <div class="thread-comments">
-        ${renderComment(thread.root)}
-        ${hasReplies ? `<div class="thread-replies">${repliesHtml}</div>` : ''}
-      </div>
-    </div>
-  `
-}
-
-function renderReviewBadge(state: Review['state']): string {
-  const map: Record<string, { label: string; cls: string }> = {
-    APPROVED: { label: '✓ Approved', cls: 'badge--approved' },
-    CHANGES_REQUESTED: { label: '✗ Changes requested', cls: 'badge--changes' },
-    COMMENTED: { label: '◎ Commented', cls: 'badge--commented' },
-    DISMISSED: { label: '⊘ Dismissed', cls: 'badge--dismissed' },
-    PENDING: { label: '◷ Pending', cls: 'badge--pending' },
-  }
-  const { label, cls } = map[state] ?? { label: state, cls: '' }
-  return `<span class="badge ${cls}">${label}</span>`
-}
-
-function renderReviewSummaries(reviews: Review[]): string {
-  if (reviews.length === 0) return ''
-  const items = reviews
-    .filter(r => r.body || r.state !== 'COMMENTED')
-    .map(r => `
-      <div class="review-summary">
-        <div class="review-summary-header">
-          <a href="${r.user.html_url}" target="_blank" rel="noopener" class="comment-author">
-            <img src="${r.user.avatar_url}&s=40" alt="${escapeHtml(r.user.login)}" class="avatar" width="20" height="20" />
-            <span class="username">${escapeHtml(r.user.login)}</span>
-          </a>
-          ${renderReviewBadge(r.state)}
-          <span class="comment-date">${formatDate(r.submitted_at)}</span>
-        </div>
-        ${r.body ? `<div class="comment-body">${renderMarkdown(r.body)}</div>` : ''}
-      </div>
-    `)
-  if (items.length === 0) return ''
-  return `
-    <section class="section">
-      <h2 class="section-title"><span>Reviews</span><span class="section-count">${reviews.length}</span></h2>
-      <div class="reviews-list">${items.join('')}</div>
-    </section>
-  `
-}
+    type CommentThread,
+    fetchPRData,
+    GitHubUser,
+    parsePRUrl,
+    type PRData,
+    type Review,
+    type ReviewComment
+} from "./github";
 
 function renderResults(data: PRData): string {
-  const threads = groupIntoThreads(data.comments)
-  const totalComments = data.comments.length
-
-  // Group threads by file
-  const byFile = new Map<string, CommentThread[]>()
-  for (const t of threads) {
-    const list = byFile.get(t.path) ?? []
-    list.push(t)
-    byFile.set(t.path, list)
-  }
-
-  let threadIndex = 0
-  const fileGroups = [...byFile.entries()].map(([file, fileThreads]) => {
-    const html = fileThreads.map(t => renderThread(t, threadIndex++)).join('')
     return `
-      <div class="file-group">
-        <div class="file-group-header">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M2 1.75C2 .784 2.784 0 3.75 0h6.586c.464 0 .909.184 1.237.513l2.914 2.914c.329.328.513.773.513 1.237v9.586A1.75 1.75 0 0113.25 16h-9.5A1.75 1.75 0 012 14.25V1.75zm1.75-.25a.25.25 0 00-.25.25v12.5c0 .138.112.25.25.25h9.5a.25.25 0 00.25-.25V6h-2.75A1.75 1.75 0 018 4.25V1.5H3.75zm6 .062V4.25c0 .138.112.25.25.25h2.688a.252.252 0 00-.011-.013L9.773 1.573a.252.252 0 00-.023-.011z"/></svg>
-          <span>${escapeHtml(file)}</span>
-          <span class="file-thread-count">${fileThreads.length} ${fileThreads.length === 1 ? 'thread' : 'threads'}</span>
+        <div class="results">
+            ${renderHeader(data)}
+            ${renderStats(data)}
+            ${renderReviewSummaries(data.reviews)}
+            ${renderThreads(data.threads)}
         </div>
-        ${html}
-      </div>
-    `
-  }).join('')
+    `;
+}
 
-  return `
-    <div class="results">
-      <div class="pr-header">
+function renderHeader(data: PRData) {
+    return `<div class="pr-header">
         <div class="pr-meta">
           <span class="pr-number">#${data.pr.number}</span>
           <span class="pr-state pr-state--${data.pr.state}">${data.pr.state}</span>
         </div>
         <h1 class="pr-title">${escapeHtml(data.pr.title)}</h1>
         <div class="pr-byline">
-          <a href="${data.pr.user.html_url}" target="_blank" rel="noopener" class="comment-author">
-            <img src="${data.pr.user.avatar_url}&s=40" alt="${escapeHtml(data.pr.user.login)}" class="avatar" width="20" height="20" />
-            <span class="username">${escapeHtml(data.pr.user.login)}</span>
-          </a>
+          ${renderUser(data.pr.user)}
           <span class="pr-date">opened ${formatDate(data.pr.created_at)}</span>
           <a href="${data.pr.html_url}" target="_blank" rel="noopener" class="gh-link">View on GitHub ↗</a>
         </div>
-      </div>
+      </div>`;
+}
 
-      <div class="stats-bar">
+function renderStats(data: PRData): string {
+    const totalComments = data.threads.reduce(
+        (sum, t) => sum + t.comments.length,
+        0,
+    );
+    return `      <div class="stats-bar">
         <div class="stat">
-          <span class="stat-value">${threads.length}</span>
+          <span class="stat-value">${data.threads.length}</span>
           <span class="stat-label">Threads</span>
         </div>
         <div class="stat">
@@ -199,32 +49,195 @@ function renderResults(data: PRData): string {
           <span class="stat-label">Comments</span>
         </div>
         <div class="stat">
-          <span class="stat-value">${byFile.size}</span>
-          <span class="stat-label">Files</span>
-        </div>
-        <div class="stat">
           <span class="stat-value">${data.reviews.length}</span>
           <span class="stat-label">Reviews</span>
         </div>
+      </div>`;
+}
+
+function renderReviewSummaries(reviews: Review[]): string {
+    // Exclude reviews with no body and where the state is just "COMMENTED": they are fully represented
+    // via the comments section.
+    const filteredReviews = reviews.filter(
+        (r) => r.body || r.state !== "COMMENTED",
+    );
+    if (filteredReviews.length === 0) return "";
+
+    const items = filteredReviews.map(
+        (r) => `
+      <div class="review-summary">
+        <div class="review-summary-header">
+          ${renderUser(r.user)}
+          ${renderReviewBadge(r.state)}
+          <span class="comment-date">${formatDate(r.submitted_at)}</span>
+        </div>
+        ${r.body ? `<div class="comment-body">${renderMarkdown(r.body)}</div>` : ""}
       </div>
+    `,
+    );
 
-      ${renderReviewSummaries(data.reviews)}
-
-      ${threads.length > 0 ? `
+    return `
         <section class="section">
-          <h2 class="section-title"><span>Inline Comments</span><span class="section-count">${totalComments}</span></h2>
-          <div class="threads-list">${fileGroups}</div>
+          <h2 class="section-title"><span>Reviews</span><span class="section-count">${filteredReviews.length}</span></h2>
+          <div class="reviews-list">${items.join("")}</div>
         </section>
-      ` : `<div class="empty-state">No inline review comments on this pull request.</div>`}
+    `;
+}
+function renderThreads(threads: CommentThread[]): string {
+    if (threads.length === 0)
+        return `<div class="empty-state">No inline review comments on this pull request.</div>`;
+
+    const totalComments = threads.reduce(
+        (sum, t) => sum + t.comments.length,
+        0,
+    );
+
+    return `
+        <section class="section">
+          <h2 class="section-title">
+            <span>Inline Comments</span>
+            <span class="section-count">${totalComments}</span>
+          </h2>
+          <div class="threads-list">${threads.map(renderThread).join("")}</div>
+        </section>
+      `;
+}
+
+function renderThread(thread: CommentThread) {
+    const replies = thread.comments.slice(1);
+    const repliesHtml = replies.map((r) => renderComment(r, true)).join("");
+    const hasReplies = replies.length > 0;
+
+    const resolvedBy = thread.resolved_by
+        ? `<div class="thread-resolved">
+             <span class="badge badge--approved">✓ Resolved</span>
+            ${renderUser(thread.resolved_by)}
+        </div>`
+        : "";
+
+    const html = `
+      <div class="thread">
+          <div class="thread-header">
+            <span>${escapeHtml(thread.path)}${thread.line ? ":" + escapeHtml(String(thread.line)) : ""}</span>
+            ${resolvedBy}
+          </div>
+          <!--
+          <details class="diff-details">
+            <summary class="diff-summary">View diff context</summary>
+            $ {renderDiffHunk(thread.diff_hunk)}
+          </details>
+          -->
+          <div class="thread-comments">
+            ${renderComment(thread.comments[0])}
+            ${hasReplies ? `<div class="thread-replies">${repliesHtml}</div>` : ""}
+          </div>
+      </div>
+    `;
+    return html;
+}
+
+
+function formatDate(iso: string): string {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    });
+}
+
+function escapeHtml(str: string): string {
+    return str
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+}
+
+// Very basic markdown → HTML: bold, italic, inline code, code blocks, links
+function renderMarkdown(md: string): string {
+    if (!md) return "";
+    let html = escapeHtml(md);
+    // Code blocks
+    html = html.replace(/```[\s\S]*?```/g, (match) => {
+        const inner = match.slice(3, -3).replace(/^[^\n]*\n?/, "");
+        return `<pre class="md-code-block"><code>${inner}</code></pre>`;
+    });
+    // Inline code
+    html = html.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
+    // Bold
+    html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    // Italic
+    html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    // Links
+    html = html.replace(
+        /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
+        '<a href="$2" target="_blank" rel="noopener">$1</a>',
+    );
+    // Newlines → <br>
+    html = html.replace(/\n/g, "<br>");
+    return html;
+}
+
+function renderDiffHunk(hunk: string): string {
+    const lines = hunk.split("\n");
+    const rendered = lines
+        .map((line) => {
+            let cls = "diff-line";
+            if (line.startsWith("+")) cls += " diff-add";
+            else if (line.startsWith("-")) cls += " diff-remove";
+            else if (line.startsWith("@@")) cls += " diff-meta";
+            return `<div class="${cls}">${escapeHtml(line)}</div>`;
+        })
+        .join("");
+    return `<div class="diff-hunk">${rendered}</div>`;
+}
+
+function renderComment(comment: ReviewComment, isReply = false): string {
+    return `
+    <div class="comment ${isReply ? "comment--reply" : ""}">
+      <div class="comment-header">
+        ${renderUser(comment.user)}
+        <span class="comment-date">${formatDate(comment.created_at)}</span>
+        <a href="${comment.html_url}" target="_blank" rel="noopener" class="comment-link" title="View on GitHub">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M7.775 3.275a.75.75 0 001.06 1.06l1.25-1.25a2 2 0 112.83 2.83l-2.5 2.5a2 2 0 01-2.83 0 .75.75 0 00-1.06 1.06 3.5 3.5 0 004.95 0l2.5-2.5a3.5 3.5 0 00-4.95-4.95l-1.25 1.25zm-4.69 9.64a2 2 0 010-2.83l2.5-2.5a2 2 0 012.83 0 .75.75 0 001.06-1.06 3.5 3.5 0 00-4.95 0l-2.5 2.5a3.5 3.5 0 004.95 4.95l1.25-1.25a.75.75 0 00-1.06-1.06l-1.25 1.25a2 2 0 01-2.83 0z"/></svg>
+        </a>
+      </div>
+      <div class="comment-body">${comment.bodyHTML}</div>
     </div>
-  `
+  `;
+}
+
+function renderUser(user: GitHubUser): string {
+    return `
+        <a href="${user.html_url}" target="_blank" rel="noopener" class="github-user">
+          <img src="${user.avatar_url}&s=40" alt="${escapeHtml(user.login)}" class="avatar" width="20" height="20" />
+          <span class="username">${escapeHtml(user.login)}</span>
+        </a>`;
+}
+
+function renderReviewBadge(state: Review["state"]): string {
+    const map: Record<string, { label: string; cls: string }> = {
+        APPROVED: { label: "✓ Approved", cls: "badge--approved" },
+        CHANGES_REQUESTED: {
+            label: "✗ Changes requested",
+            cls: "badge--changes",
+        },
+        COMMENTED: { label: "◎ Commented", cls: "badge--commented" },
+        DISMISSED: { label: "⊘ Dismissed", cls: "badge--dismissed" },
+        PENDING: { label: "◷ Pending", cls: "badge--pending" },
+    };
+    const { label, cls } = map[state] ?? { label: state, cls: "" };
+    return `<span class="badge ${cls}">${label}</span>`;
 }
 
 export function renderApp(root: HTMLElement): void {
-  let token = localStorage.getItem('gh_token') ?? ''
+    let token = localStorage.getItem("gh_token") ?? "";
 
-  function getHtml(content: string): string {
-    return `
+    function getHtml(content: string): string {
+        return `
       <div class="app">
         <header class="app-header">
           <div class="header-inner">
@@ -234,7 +247,7 @@ export function renderApp(root: HTMLElement): void {
             </div>
             <button class="token-btn" id="token-toggle">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M0 5.5l4.5 4.5L10 2.5" stroke="currentColor" stroke-width="1.5" fill="none"/><path fill-rule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 1.5a6.5 6.5 0 110 13 6.5 6.5 0 010-13z"/></svg>
-              ${token ? '🔑 Token set' : 'Add token'}
+              ${token ? "🔑 Token set" : "Add token"}
             </button>
           </div>
         </header>
@@ -271,92 +284,101 @@ export function renderApp(root: HTMLElement): void {
           <div id="output">${content}</div>
         </main>
       </div>
-    `
-  }
+    `;
+    }
 
-  function render(content = '', loading = false): void {
-    root.innerHTML = getHtml(loading ? `
+    function render(content = "", loading = false): void {
+        root.innerHTML = getHtml(
+            loading
+                ? `
       <div class="loading">
         <div class="loading-spinner"></div>
         <span>Fetching review comments…</span>
       </div>
-    ` : content)
+    `
+                : content,
+        );
 
-    // Restore input value after re-render
-    const input = root.querySelector<HTMLInputElement>('#pr-url')
-    const urlParam = new URLSearchParams(location.search).get('url')
-    if (input && urlParam) input.value = urlParam
+        // Restore input value after re-render
+        const input = root.querySelector<HTMLInputElement>("#pr-url");
+        const urlParam = new URLSearchParams(location.search).get("url");
+        if (input && urlParam) input.value = urlParam;
 
-    setupHandlers()
-  }
+        setupHandlers();
+    }
 
-  function setupHandlers(): void {
-    const form = root.querySelector<HTMLFormElement>('#pr-form')
-    const tokenToggle = root.querySelector<HTMLButtonElement>('#token-toggle')
-    const tokenPanel = root.querySelector<HTMLDivElement>('#token-panel')
-    const tokenSave = root.querySelector<HTMLButtonElement>('#token-save')
-    const tokenClear = root.querySelector<HTMLButtonElement>('#token-clear')
+    function setupHandlers(): void {
+        const form = root.querySelector<HTMLFormElement>("#pr-form");
+        const tokenToggle =
+            root.querySelector<HTMLButtonElement>("#token-toggle");
+        const tokenPanel = root.querySelector<HTMLDivElement>("#token-panel");
+        const tokenSave = root.querySelector<HTMLButtonElement>("#token-save");
+        const tokenClear =
+            root.querySelector<HTMLButtonElement>("#token-clear");
 
-    tokenToggle?.addEventListener('click', () => {
-      tokenPanel?.classList.toggle('hidden')
-    })
+        tokenToggle?.addEventListener("click", () => {
+            tokenPanel?.classList.toggle("hidden");
+        });
 
-    tokenSave?.addEventListener('click', () => {
-      const val = root.querySelector<HTMLInputElement>('#token-input')?.value ?? ''
-      token = val
-      localStorage.setItem('gh_token', val)
-      tokenPanel?.classList.add('hidden')
-      render()
-    })
+        tokenSave?.addEventListener("click", () => {
+            const val =
+                root.querySelector<HTMLInputElement>("#token-input")?.value ??
+                "";
+            token = val;
+            localStorage.setItem("gh_token", val);
+            tokenPanel?.classList.add("hidden");
+            render();
+        });
 
-    tokenClear?.addEventListener('click', () => {
-      token = ''
-      localStorage.removeItem('gh_token')
-      const ti = root.querySelector<HTMLInputElement>('#token-input')
-      if (ti) ti.value = ''
-    })
+        tokenClear?.addEventListener("click", () => {
+            token = "";
+            localStorage.removeItem("gh_token");
+            const ti = root.querySelector<HTMLInputElement>("#token-input");
+            if (ti) ti.value = "";
+        });
 
-    form?.addEventListener('submit', async (e) => {
-      e.preventDefault()
-      const url = root.querySelector<HTMLInputElement>('#pr-url')?.value ?? ''
-      const parsed = parsePRUrl(url)
-      if (!parsed) {
-        root.querySelector('#output')!.innerHTML = `
+        form?.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const url =
+                root.querySelector<HTMLInputElement>("#pr-url")?.value ?? "";
+            const parsed = parsePRUrl(url);
+            if (!parsed) {
+                root.querySelector("#output")!.innerHTML = `
           <div class="error">
             <strong>Invalid URL.</strong> Please enter a GitHub pull request URL like:<br/>
             <code>https://github.com/owner/repo/pull/123</code>
           </div>
-        `
-        return
-      }
+        `;
+                return;
+            }
 
-      history.replaceState(null, '', `?url=${encodeURIComponent(url)}`)
-      render('', true)
-      // Re-populate input after loading re-render
-      const input = root.querySelector<HTMLInputElement>('#pr-url')
-      if (input) input.value = url
+            history.replaceState(null, "", `?url=${encodeURIComponent(url)}`);
+            render("", true);
+            // Re-populate input after loading re-render
+            const input = root.querySelector<HTMLInputElement>("#pr-url");
+            if (input) input.value = url;
 
-      try {
-        const data = await fetchPRData(parsed, token || undefined)
-        root.querySelector('#output')!.innerHTML = renderResults(data)
-      } catch (err) {
-        root.querySelector('#output')!.innerHTML = `
+            try {
+                const data = await fetchPRData(parsed, token || undefined);
+                root.querySelector("#output")!.innerHTML = renderResults(data);
+            } catch (err) {
+                root.querySelector("#output")!.innerHTML = `
           <div class="error">
             <strong>Error:</strong> ${escapeHtml(err instanceof Error ? err.message : String(err))}
           </div>
-        `
-      }
-    })
-  }
-
-  // Check for URL param on load
-  const urlParam = new URLSearchParams(location.search).get('url')
-  render()
-  if (urlParam) {
-    const input = root.querySelector<HTMLInputElement>('#pr-url')
-    if (input) {
-      input.value = urlParam
-      input.closest('form')?.dispatchEvent(new Event('submit'))
+        `;
+            }
+        });
     }
-  }
+
+    // Check for URL param on load
+    const urlParam = new URLSearchParams(location.search).get("url");
+    render();
+    if (urlParam) {
+        const input = root.querySelector<HTMLInputElement>("#pr-url");
+        if (input) {
+            input.value = urlParam;
+            input.closest("form")?.dispatchEvent(new Event("submit"));
+        }
+    }
 }

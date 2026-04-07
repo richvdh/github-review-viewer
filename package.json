@@ -1,15 +1,20 @@
 {
-  "name": "pr-review-viewer",
-  "private": true,
-  "version": "1.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview"
-  },
-  "devDependencies": {
-    "typescript": "^5.3.3",
-    "vite": "^5.1.0"
-  }
+    "name": "pr-review-viewer",
+    "private": true,
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build",
+        "preview": "vite preview"
+    },
+    "devDependencies": {
+        "@octokit/core": "^7.0.6",
+        "@octokit/graphql": "^9.0.3",
+        "@octokit/graphql-schema": "^15.26.1",
+        "@octokit/plugin-paginate-graphql": "^6.0.0",
+        "prettier": "^3.8.1",
+        "typescript": "^5.3.3",
+        "vite": "^5.1.0"
+    }
 }
