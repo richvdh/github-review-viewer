@@ -16,11 +16,13 @@
     --text-code: #a8d8b8;
     --accent: #4caf7d;
     --accent-dim: #2a6647;
-    --accent-glow: rgba(76, 175, 125, 0.12);
+    --accent-glow: #4caf7d1f;
     --accent-bright: #5dca93;
-    --red: rgba(224, 92, 92, 1);
+    --diffBlob-additionWord-bgColor: #2ea04366;
+    --red: #e05c5c;
     --red-dim: #5c2020;
-    --red-surface: rgba(224, 92, 92, 0.08);
+    --red-bg: #e05c5c14;
+    --diffBlob-deletionWord-bgColor: #f8514966;
     --yellow: #d4a843;
     --yellow-dim: #4a3a18;
     --blue: #5c9de0;
@@ -622,17 +624,24 @@ details[open] > .diff-summary::before {
 .blob-code-addition {
     background: var(--surface-3);
     color: var(--text-code);
+
+    .x {
+        background: var(--diffBlob-additionWord-bgColor);
+    }
 }
 
 .diff-remove,
 .blob-code-deletion {
-    background: var(--red-surface);
+    background: var(--red-bg);
     color: var(--red);
+
+    .x {
+        background: var(--diffBlob-deletionWord-bgColor);
+    }
 }
 
 .blob-code-inner .x {
     font-weight: 1000;
-    background: rgba(0, 0, 0, 0.3);
     display: inline-block;
     margin: 0;
 }
