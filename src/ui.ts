@@ -255,9 +255,11 @@ function renderDiffHunk(
     let leftLineNum = 0;
     let rightLineNum = 0;
 
+    const before: string[] = [];
     const results: string[] = [];
 
     for (const line of lines) {
+        let cls = "diff-line";
         if (line.startsWith("@@")) {
             // meta line
             const metaMatch = line.match(
@@ -271,11 +273,8 @@ function renderDiffHunk(
                 leftLineNum = parseInt(metaMatch[1]) - 1;
                 rightLineNum = parseInt(metaMatch[2]) - 1;
             }
-            continue;
-        }
-
-        let cls = "diff-line";
-        if (line.startsWith("+")) {
+            cls += " diff-meta";
+        } else if (line.startsWith("+")) {
             cls += " diff-add";
             rightLineNum += 1;
         } else if (line.startsWith("-")) {
@@ -286,19 +285,27 @@ function renderDiffHunk(
             rightLineNum += 1;
         }
 
-        // Only show the right bit of the diff
+        const formattedLine = `<div class="${cls}">${escapeHtml(line)}</div>`;
+
         if (rightLineNum < startLine) {
-            continue;
+            before.push(formattedLine);
+        } else if (startLine <= endLine) {
+            results.push(formattedLine);
         }
-
-        if (rightLineNum > endLine) {
-            continue;
-        }
-
-        results.push(`<div class="${cls}">${escapeHtml(line)}</div>`);
     }
 
-    return `<div class="diff-hunk">${results.join("")}</div>`;
+    const beforeHunk = before.length
+        ? `
+        <details class="diff-details">
+            <summary class="diff-summary">More context</summary>
+            ${before.join("")}
+        </details>`
+        : "";
+
+    return `<div class="diff-hunk">
+      ${beforeHunk}
+      ${results.join("")}
+    </div>`;
 }
 
 function renderComment(comment: ReviewComment, isReply = false): string {

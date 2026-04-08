@@ -593,7 +593,7 @@ button.token-clear-btn {
     content: "▸";
     font-size: 0.65rem;
 }
-details[open] .diff-summary::before {
+details[open] > .diff-summary::before {
     content: "▾";
 }
 
