@@ -1,10 +1,6 @@
 /* ── Reset & Vars ──────────────────────────────────────────────────────────── */
-*,
-*::before,
-*::after {
+* {
     box-sizing: border-box;
-    margin: 0;
-    padding: 0;
 }
 
 :root {
@@ -17,6 +13,7 @@
     --text: #d4dbd6;
     --text-muted: #6b7870;
     --text-dim: #4a5450;
+    --text-code: #a8d8b8;
     --accent: #4caf7d;
     --accent-dim: #2a6647;
     --accent-glow: rgba(76, 175, 125, 0.12);
@@ -676,16 +673,31 @@ details[open] .diff-summary::before {
     color: var(--text);
 }
 
-.comment-body a {
-    color: var(--accent);
+.comment-body * {
+    margin-top: 1ex;
+    margin-bottom: 1ex;
 }
+
 .comment-body strong {
     color: #eaf0ec;
     font-weight: 600;
 }
 
-.md-code-block {
-    background: #0a0c0b;
+/* inline code */
+.comment-body code {
+    background: var(--surface-3);
+    color: var(--text-code);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--mono);
+    font-size: 0.82em;
+}
+
+/* multiline code block */
+.comment-body pre {
+    background: var(--surface-3);
+    color: var(--text-code);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 10px 14px;
@@ -694,17 +706,12 @@ details[open] .diff-summary::before {
     font-family: var(--mono);
     font-size: 0.78rem;
     line-height: 1.5;
-    color: #c4cfca;
 }
 
-.md-inline-code {
-    background: var(--surface-3);
-    border: 1px solid var(--border);
-    padding: 1px 5px;
-    border-radius: 3px;
-    font-family: var(--mono);
-    font-size: 0.82em;
-    color: #a8d8b8;
+.comment-body blockquote {
+    padding-left: 16px;
+    margin-left: 16px;
+    border-left: 2px solid var(--border);
 }
 
 /* ── Github User ────────────────────────────────────────────────────────────── */
