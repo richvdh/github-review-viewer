@@ -111,24 +111,27 @@ function renderThreadFilters(threadFilters: ThreadFilters): string {
     <div class="threads-filters">
         <form id="threads-filters-form">
             <div class="threads-filters-row">
+                <label for="threads-filters-show-all-threads">Show all threads</label>
+                <input type="checkbox" id="threads-filters-show-all-threads" ${threadFilters.showAllThreads ? "checked" : ""} />
+            </div>
+
+            <div class="threads-filters-row">
                 <label for="threads-filters-show-unresolved-threads">Show unresolved threads</label>
                 <input type="checkbox" id="threads-filters-show-unresolved-threads" ${threadFilters.showUnresolvedThreads ? "checked" : ""} />
             </div>
 
-            <div class="threads-filters-row">
-                <label for="threads-filters-show-other-resolved-threads">Show threads resolved by other users</label>
-                <input type="checkbox" id="threads-filters-show-other-resolved-threads" ${threadFilters.showOtherUserResolvedThreads ? "checked" : ""} />
-            </div>
-            
-            <div class="threads-filters-row">
-                <label for="threads-filters-show-my-resolved-threads">Show threads resolved by me</label>
-                <input type="checkbox" id="threads-filters-show-my-resolved-threads" ${threadFilters.showMyResolvedThreads ? "checked" : ""} />
-            </div>
-            
             <div class="threads-filters-row">    
-                <label for="threads-filters-my-last-comment">Show threads I have commented on since:</label>
+                <label for="threads-filters-my-last-comment">Threads which I have commented on since:</label>
                 <input type="text" id="threads-filters-my-last-comment" value="${threadFilters.myLastCommentDate ? escapeHtml(threadFilters.myLastCommentDate) : ""}"
                   placeholder="2026-04-01"/>
+                <label>... and which:</label>
+            </div>
+
+            <div style="padding-left: 30px">
+                <div class="threads-filters-row">
+                    <label for="threads-filters-hide-my-resolved-threads">have not been resolved by me</label>
+                    <input type="checkbox" id="threads-filters-hide-my-resolved-threads" ${threadFilters.hideMyResolvedThreads ? "checked" : ""} />
+                </div>            
             </div>
             
             <div class="threads-filters-row">    
@@ -156,21 +159,15 @@ function addFilterChangeHooks(data: PRData): void {
 function updateThreadsList(whoami: string, threads: CommentThread[]): void {
     const filter = new ThreadFilters(whoami);
 
+    filter.showAllThreads = (
+        document.getElementById(
+            "threads-filters-show-all-threads",
+        ) as HTMLInputElement
+    ).checked;
+
     filter.showUnresolvedThreads = (
         document.getElementById(
             "threads-filters-show-unresolved-threads",
-        ) as HTMLInputElement
-    ).checked;
-
-    filter.showOtherUserResolvedThreads = (
-        document.getElementById(
-            "threads-filters-show-other-resolved-threads",
-        ) as HTMLInputElement
-    ).checked;
-
-    filter.showMyResolvedThreads = (
-        document.getElementById(
-            "threads-filters-show-my-resolved-threads",
         ) as HTMLInputElement
     ).checked;
 
@@ -179,6 +176,12 @@ function updateThreadsList(whoami: string, threads: CommentThread[]): void {
             "threads-filters-my-last-comment",
         ) as HTMLInputElement
     ).value;
+
+    filter.hideMyResolvedThreads = (
+        document.getElementById(
+            "threads-filters-hide-my-resolved-threads",
+        ) as HTMLInputElement
+    ).checked;
 
     const filtered = filter.apply(threads);
     const html = filtered.map(renderThread).join("");
@@ -213,10 +216,7 @@ function renderThread(thread: CommentThread) {
             <span>${escapeHtml(thread.path)}${linerange}</span>
             ${resolvedBy}
           </div>
-          <details class="diff-details">
-            <summary class="diff-summary">View diff context</summary>
-            ${renderDiffHunk(firstComment.diff_hunk, thread.startLine, thread.endLine)}
-          </details>    
+          ${renderDiffHunk(firstComment.diff_hunk, thread.startLine, thread.endLine)}
           <div class="thread-comments">
             ${renderComment(firstComment)}
             ${hasReplies ? `<div class="thread-replies">${repliesHtml}</div>` : ""}

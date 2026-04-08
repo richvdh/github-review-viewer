@@ -1,10 +1,14 @@
 import type { CommentThread } from "./github.ts";
 
+// Broadly, we want to show two categories of threads:
+//  - Unresolved threads
+//  - Threads which we have commented on since a given date, and which we have not marked as resolved.
+
 export class ThreadFilters {
+    public showAllThreads: boolean = false;
     public showUnresolvedThreads: boolean = true;
-    public showOtherUserResolvedThreads: boolean = true;
-    public showMyResolvedThreads: boolean = false;
     public myLastCommentDate: string | undefined;
+    public hideMyResolvedThreads: boolean = true;
 
     public constructor(public readonly whoami: String) {}
 
@@ -15,22 +19,9 @@ export class ThreadFilters {
             : undefined;
 
         return threads.filter((t) => {
+            if (this.showAllThreads) return true;
+
             if (this.showUnresolvedThreads && !t.resolved_by) return true;
-
-            if (
-                this.showOtherUserResolvedThreads &&
-                t.resolved_by &&
-                t.resolved_by.login !== this.whoami
-            ) {
-                return true;
-            }
-
-            if (
-                this.showMyResolvedThreads &&
-                t.resolved_by?.login === this.whoami
-            ) {
-                return true;
-            }
 
             if (myLastCommentDate) {
                 const idx = t.comments.findIndex(
@@ -38,7 +29,14 @@ export class ThreadFilters {
                         c.user.login === this.whoami &&
                         c.created_at >= myLastCommentDate,
                 );
-                if (idx !== -1) return true;
+                if (idx !== -1) {
+                    if (
+                        !this.hideMyResolvedThreads ||
+                        t.resolved_by?.login !== this.whoami
+                    ) {
+                        return true;
+                    }
+                }
             }
 
             return false;

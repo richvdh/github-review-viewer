@@ -614,6 +614,10 @@ details[open] > .diff-summary::before {
     white-space: pre;
 }
 
+.blob-code-inner {
+    white-space: pre;
+}
+
 .diff-add,
 .blob-code-addition {
     background: var(--surface-3);
