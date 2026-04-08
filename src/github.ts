@@ -3,7 +3,7 @@ import {
     paginateGraphQL,
     paginateGraphQLInterface,
 } from "@octokit/plugin-paginate-graphql";
-import type { Actor, Repository } from "@octokit/graphql-schema";
+import type { Actor, DiffSide, Repository } from "@octokit/graphql-schema";
 
 export interface GitHubUser {
     login: string;
@@ -16,7 +16,6 @@ export interface ReviewComment {
     bodyHTML: string;
     created_at: Date;
     html_url: string;
-    commit_id: string;
     diff_hunk: string;
 }
 
@@ -100,24 +99,6 @@ async function ghFetch<T>(path: string, token?: string): Promise<T> {
     return res.json() as Promise<T>;
 }
 
-async function fetchAllPages<T>(path: string, token?: string): Promise<T[]> {
-    const results: T[] = [];
-    let page = 1;
-
-    while (true) {
-        const separator = path.includes("?") ? "&" : "?";
-        const data = await ghFetch<T[]>(
-            `${path}${separator}per_page=100&page=${page}`,
-            token,
-        );
-        results.push(...data);
-        if (data.length < 100) break;
-        page++;
-    }
-
-    return results;
-}
-
 export interface PRData {
     whoami: string;
     pr: PullRequest;
@@ -128,7 +109,18 @@ export interface PRData {
 export interface CommentThread {
     comments: ReviewComment[];
     path: string;
-    line: number | null;
+
+    /** The start line in the file to which this thread refers (multi-line only). */
+    startLine: number | null;
+    /** The side of the diff that the first line of the thread starts on (multi-line only). */
+    startDiffSide: DiffSide | null;
+
+    /** The line in the file to which this thread refers. */
+    endLine: number;
+
+    /** The side of the diff on which this thread was placed. */
+    endDiffSide: DiffSide;
+
     resolved_by: GitHubUser | null;
 }
 
@@ -221,26 +213,20 @@ async function getCommentThreads(
                 }
                 nodes {
                   comments(first:100) {
-                    nodes { 
-                      author { 
-                        login
-                        avatarUrl
-                        url
-                      }
+                    nodes {
+                      author { login avatarUrl url }
                       bodyHTML
-                      commit { id }
                       createdAt
                       diffHunk
                       url
                     }
                   }
+                  diffSide
                   originalLine
+                  originalStartLine
                   path
-                  resolvedBy { 
-                    login
-                    avatarUrl
-                    url
-                  }
+                  resolvedBy { login avatarUrl url }
+                  startDiffSide
                 }
               }
             }
@@ -261,7 +247,10 @@ async function getCommentThreads(
             const thread: CommentThread = {
                 comments: [],
                 path: respThread.path,
-                line: respThread.originalLine ?? null,
+                startLine: respThread.originalStartLine ?? null,
+                startDiffSide: respThread.startDiffSide ?? null,
+                endLine: respThread.originalLine!,
+                endDiffSide: respThread.diffSide!,
                 resolved_by:
                     (respThread.resolvedBy &&
                         actorToGithubUser(respThread.resolvedBy)) ??
@@ -273,7 +262,6 @@ async function getCommentThreads(
                 const respComment = c!;
                 const comment: ReviewComment = {
                     bodyHTML: respComment.bodyHTML,
-                    commit_id: respComment.commit!.id,
                     created_at: new Date(respComment.createdAt),
                     diff_hunk: respComment.diffHunk,
                     html_url: respComment.url,

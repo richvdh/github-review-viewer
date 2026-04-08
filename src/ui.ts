@@ -142,8 +142,6 @@ function renderThreadFilters(threadFilters: ThreadFilters): string {
 /** Called after rendering to add listeners to the filters to rerender */
 function addFilterChangeHooks(data: PRData): void {
     const callback = () => updateThreadsList(data.whoami, data.threads);
-    // document.getElementById("threads-filters-show-other-resolved-threads")!.onchange =
-    //     callback;
     document.getElementById("threads-filters-form")!.onsubmit = (e) => {
         e.preventDefault();
         callback();
@@ -189,7 +187,7 @@ function updateThreadsList(whoami: string, threads: CommentThread[]): void {
         filtered.length,
     );
 
-    // TODO: add to
+    // TODO: add to query string
 }
 
 function renderThread(thread: CommentThread) {
@@ -207,16 +205,18 @@ function renderThread(thread: CommentThread) {
         </div>`
         : "";
 
+    const linerange = `:${thread.startLine ? thread.startLine + "-" : ""}${thread.endLine}`;
+
     const html = `
       <div class="thread">
           <div class="thread-header">
-            <span>${escapeHtml(thread.path)}${thread.line ? ":" + escapeHtml(String(thread.line)) : ""}</span>
+            <span>${escapeHtml(thread.path)}${linerange}</span>
             ${resolvedBy}
           </div>
           <details class="diff-details">
             <summary class="diff-summary">View diff context</summary>
-            ${renderDiffHunk(firstComment.diff_hunk)}
-          </details>
+            ${renderDiffHunk(firstComment.diff_hunk, thread.startLine, thread.endLine)}
+          </details>    
           <div class="thread-comments">
             ${renderComment(firstComment)}
             ${hasReplies ? `<div class="thread-replies">${repliesHtml}</div>` : ""}
@@ -244,18 +244,61 @@ function escapeHtml(str: string): string {
         .replace(/"/g, "&quot;");
 }
 
-function renderDiffHunk(hunk: string): string {
+function renderDiffHunk(
+    hunk: string,
+    startLine: number | null,
+    endLine: number,
+): string {
+    if (startLine === null) startLine = endLine - 4;
     const lines = hunk.split("\n");
-    const rendered = lines
-        .map((line) => {
-            let cls = "diff-line";
-            if (line.startsWith("+")) cls += " diff-add";
-            else if (line.startsWith("-")) cls += " diff-remove";
-            else if (line.startsWith("@@")) cls += " diff-meta";
-            return `<div class="${cls}">${escapeHtml(line)}</div>`;
-        })
-        .join("");
-    return `<div class="diff-hunk">${rendered}</div>`;
+
+    let leftLineNum = 0;
+    let rightLineNum = 0;
+
+    const results: string[] = [];
+
+    for (const line of lines) {
+        if (line.startsWith("@@")) {
+            // meta line
+            const metaMatch = line.match(
+                "^@@ -([0-9]+),[0-9]+ \\+([0-9]+),[0-9]+ @@",
+            );
+            if (!metaMatch) {
+                console.warn(`Unable to parse meta line ${line}`);
+            } else {
+                // Subtract 1 from the parsed line numbers. because we'll
+                // add 1 again before we actually show the next line.
+                leftLineNum = parseInt(metaMatch[1]) - 1;
+                rightLineNum = parseInt(metaMatch[2]) - 1;
+            }
+            continue;
+        }
+
+        let cls = "diff-line";
+        if (line.startsWith("+")) {
+            cls += " diff-add";
+            rightLineNum += 1;
+        } else if (line.startsWith("-")) {
+            cls += " diff-remove";
+            leftLineNum += 1;
+        } else {
+            leftLineNum += 1;
+            rightLineNum += 1;
+        }
+
+        // Only show the right bit of the diff
+        if (rightLineNum < startLine) {
+            continue;
+        }
+
+        if (rightLineNum > endLine) {
+            continue;
+        }
+
+        results.push(`<div class="${cls}">${escapeHtml(line)}</div>`);
+    }
+
+    return `<div class="diff-hunk">${results.join("")}</div>`;
 }
 
 function renderComment(comment: ReviewComment, isReply = false): string {

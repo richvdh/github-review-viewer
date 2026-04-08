@@ -18,8 +18,9 @@
     --accent-dim: #2a6647;
     --accent-glow: rgba(76, 175, 125, 0.12);
     --accent-bright: #5dca93;
-    --red: #e05c5c;
+    --red: rgba(224, 92, 92, 1);
     --red-dim: #5c2020;
+    --red-surface: rgba(224, 92, 92, 0.08);
     --yellow: #d4a843;
     --yellow-dim: #4a3a18;
     --blue: #5c9de0;
@@ -53,7 +54,6 @@ a:hover {
     text-decoration: underline;
 }
 
-
 label {
     font-size: 0.78rem;
     color: var(--text-muted);
@@ -82,7 +82,8 @@ input::placeholder {
     color: var(--text-dim);
 }
 
-button, input[type="submit"] {
+button,
+input[type="submit"] {
     padding: 8px 14px;
     background: var(--accent);
     color: var(--bg);
@@ -95,7 +96,8 @@ button, input[type="submit"] {
     transition: all 0.15s;
 }
 
-button:hover, input[type="submit"]:hover {
+button:hover,
+input[type="submit"]:hover {
     background: var(--accent-bright);
 }
 
@@ -201,7 +203,6 @@ button.secondary:hover {
     min-width: 0;
 }
 
-
 .fetch-btn {
     display: flex;
     align-items: center;
@@ -211,7 +212,6 @@ button.secondary:hover {
     flex-shrink: 0;
     letter-spacing: 0.04em;
 }
-
 
 /* ── Token Panel ───────────────────────────────────────────────────────────── */
 .token-panel {
@@ -567,7 +567,7 @@ button.token-clear-btn {
     gap: 8px;
 }
 
-/* ── Diff Hunk ─────────────────────────────────────────────────────────────── */
+/* ── Diff Hunk and Suggestions ─────────────────────────────────────────────── */
 .diff-details {
     border-bottom: 1px solid var(--border);
 }
@@ -597,30 +597,44 @@ details[open] .diff-summary::before {
     content: "▾";
 }
 
-.diff-hunk {
+.diff-hunk,
+.blob-code-inner {
     font-family: var(--mono);
     font-size: 0.75rem;
     line-height: 1.5;
     overflow-x: auto;
+}
+
+.diff-hunk {
     padding: 8px 0;
-    background: #0a0c0b;
 }
 
 .diff-line {
     padding: 0 16px;
     white-space: pre;
 }
-.diff-add {
-    background: rgba(76, 175, 125, 0.1);
-    color: #7ec99a;
+
+.diff-add,
+.blob-code-addition {
+    background: var(--surface-3);
+    color: var(--text-code);
 }
-.diff-remove {
-    background: rgba(224, 92, 92, 0.1);
-    color: #e08080;
+
+.diff-remove,
+.blob-code-deletion {
+    background: var(--red-surface);
+    color: var(--red);
 }
+
+.blob-code-inner .x {
+    font-weight: 1000;
+    background: rgba(0, 0, 0, 0.3);
+    display: inline-block;
+    margin: 0;
+}
+
 .diff-meta {
     color: var(--blue);
-    background: rgba(92, 157, 224, 0.06);
 }
 
 /* ── Comments ──────────────────────────────────────────────────────────────── */
