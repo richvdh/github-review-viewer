@@ -5,7 +5,7 @@ import {
     parsePRUrl,
     type PRData,
     type Review,
-    type ReviewComment
+    type ReviewComment,
 } from "./github";
 
 function renderResults(data: PRData): string {
@@ -28,7 +28,7 @@ function renderHeader(data: PRData) {
         <h1 class="pr-title">${escapeHtml(data.pr.title)}</h1>
         <div class="pr-byline">
           ${renderUser(data.pr.user)}
-          <span class="pr-date">opened ${formatDate(data.pr.created_at)}</span>
+          <span class="pr-date">opened ${formatDate(new Date(data.pr.created_at))}</span>
           <a href="${data.pr.html_url}" target="_blank" rel="noopener" class="gh-link">View on GitHub ↗</a>
         </div>
       </div>`;
@@ -69,7 +69,7 @@ function renderReviewSummaries(reviews: Review[]): string {
         <div class="review-summary-header">
           ${renderUser(r.user)}
           ${renderReviewBadge(r.state)}
-          <span class="comment-date">${formatDate(r.submitted_at)}</span>
+          <span class="comment-date">${formatDate(new Date(r.submitted_at))}</span>
         </div>
         ${r.body ? `<div class="comment-body">${renderMarkdown(r.body)}</div>` : ""}
       </div>
@@ -83,24 +83,132 @@ function renderReviewSummaries(reviews: Review[]): string {
         </section>
     `;
 }
-function renderThreads(threads: CommentThread[]): string {
+
+class ThreadFilters {
+    public showResolvedThreads: boolean = true;
+    public showMyResolvedThreads: boolean = false;
+    public myLastCommentDate: string | undefined;
+
+    /** Filter the given list of threads, using this filter */
+    apply(threads: CommentThread[]): CommentThread[] {
+        const myLastCommentDate = this.myLastCommentDate
+            ? new Date(this.myLastCommentDate)
+            : undefined;
+
+        return threads.filter((t) => {
+            if (!this.showResolvedThreads && t.resolved_by) return false;
+
+            if (
+                !this.showMyResolvedThreads &&
+                t.resolved_by?.login === "richvdh"
+            ) {
+                return false;
+            }
+
+            if (myLastCommentDate) {
+                const idx = t.comments.findIndex(
+                    (c) =>
+                        c.user.login === "richvdh" &&
+                        c.created_at >= myLastCommentDate,
+                );
+                if (idx === -1) return false;
+            }
+
+            return true;
+        });
+    }
+}
+
+function renderThreads(
+    threads: CommentThread[],
+    threadFilters: ThreadFilters = new ThreadFilters(),
+): string {
     if (threads.length === 0)
         return `<div class="empty-state">No inline review comments on this pull request.</div>`;
 
-    const totalComments = threads.reduce(
-        (sum, t) => sum + t.comments.length,
-        0,
-    );
-
+    const filtered = threadFilters.apply(threads);
     return `
         <section class="section">
           <h2 class="section-title">
             <span>Inline Comments</span>
-            <span class="section-count">${totalComments}</span>
+            <span class="section-count" id="thread-comments-count">${filtered.length}</span>
           </h2>
-          <div class="threads-list">${threads.map(renderThread).join("")}</div>
+          ${renderThreadFilters(threadFilters)}
+          <div class="threads-list" id="threads-list">${filtered.map(renderThread).join("")}</div>
         </section>
       `;
+}
+
+function renderThreadFilters(threadFilters: ThreadFilters): string {
+    return `
+    <div class="threads-filters">
+        <form id="threads-filters-form">
+            <div class="threads-filters-row">
+                <label for="threads-filters-show-resolved-threads">Show resolved threads</label>
+                <input type="checkbox" id="threads-filters-show-resolved-threads" ${threadFilters.showResolvedThreads ? "checked" : ""} />
+            </div>
+            
+            <div class="threads-filters-row">
+                <label for="threads-filters-show-my resolved-threads">Show threads resolved by me</label>
+                <input type="checkbox" id="threads-filters-show-my-resolved-threads" ${threadFilters.showMyResolvedThreads ? "checked" : ""} />
+            </div>
+            
+            <div class="threads-filters-row">    
+                <label for="threads-filters-my-last-comment">Show only threads I have commented on since:</label>
+                <input type="text" id="threads-filters-my-last-comment" value="${threadFilters.myLastCommentDate ? escapeHtml(threadFilters.myLastCommentDate) : ""}"/>
+            </div>
+            
+            <div class="threads-filters-row">    
+                <input type="submit" value="Update"/>
+            </div>
+        </form>
+    </div>
+    `;
+}
+
+/** Called after rendering to add listeners to the filters to rerender */
+function addFilterChangeHooks(threads: CommentThread[]): void {
+    const callback = () => updateThreadsList(threads);
+    // document.getElementById("threads-filters-show-resolved-threads")!.onchange =
+    //     callback;
+    document.getElementById("threads-filters-form")!.onsubmit = (e) => {
+        e.preventDefault();
+        callback();
+    };
+}
+
+/**
+ * The callback which is run after the filters are updated.
+ *
+ * Reads the state of the form, and updates the UI accordingly.
+ */
+function updateThreadsList(threads: CommentThread[]): void {
+    const filter = new ThreadFilters();
+
+    filter.showResolvedThreads = (
+        document.getElementById(
+            "threads-filters-show-resolved-threads",
+        ) as HTMLInputElement
+    ).checked;
+
+    filter.showMyResolvedThreads = (
+        document.getElementById(
+            "threads-filters-show-my-resolved-threads",
+        ) as HTMLInputElement
+    ).checked;
+
+    filter.myLastCommentDate = (
+        document.getElementById(
+            "threads-filters-my-last-comment",
+        ) as HTMLInputElement
+    ).value;
+
+    const filtered = filter.apply(threads);
+    const html = filtered.map(renderThread).join("");
+    document.getElementById("threads-list")!.innerHTML = html;
+    document.getElementById("thread-comments-count")!.innerText = String(
+        filtered.length,
+    );
 }
 
 function renderThread(thread: CommentThread) {
@@ -136,9 +244,7 @@ function renderThread(thread: CommentThread) {
     return html;
 }
 
-
-function formatDate(iso: string): string {
-    const d = new Date(iso);
+function formatDate(d: Date): string {
     return d.toLocaleDateString("en-GB", {
         day: "numeric",
         month: "short",
@@ -361,6 +467,7 @@ export function renderApp(root: HTMLElement): void {
             try {
                 const data = await fetchPRData(parsed, token || undefined);
                 root.querySelector("#output")!.innerHTML = renderResults(data);
+                addFilterChangeHooks(data.threads);
             } catch (err) {
                 root.querySelector("#output")!.innerHTML = `
           <div class="error">

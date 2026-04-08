@@ -533,6 +533,11 @@ a:hover {
 }
 
 /* ── Thread ────────────────────────────────────────────────────────────────── */
+
+.threads-filters {
+    margin-bottom: 24px;
+}
+
 .thread {
     margin-bottom: 24px;
     border: 1px solid var(--border);
@@ -555,7 +560,6 @@ a:hover {
     display: flex;
     gap: 8px;
 }
-
 
 /* ── Diff Hunk ─────────────────────────────────────────────────────────────── */
 .diff-details {

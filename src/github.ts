@@ -11,7 +11,7 @@ export interface GitHubUser {
 export interface ReviewComment {
     user: GitHubUser;
     bodyHTML: string;
-    created_at: string;
+    created_at: Date;
     html_url: string;
     commit_id: string;
 }
@@ -216,7 +216,7 @@ export async function getCommentThreads(
                 const comment: ReviewComment = {
                     bodyHTML: respComment.bodyHTML,
                     commit_id: respComment.commit!.id,
-                    created_at: respComment.createdAt,
+                    created_at: new Date(respComment.createdAt),
                     html_url: respComment.url,
                     user: actorToGithubUser(respComment.author!),
                 };
