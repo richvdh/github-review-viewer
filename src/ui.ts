@@ -193,6 +193,9 @@ function updateThreadsList(whoami: string, threads: CommentThread[]): void {
 }
 
 function renderThread(thread: CommentThread) {
+    if (thread.comments.length < 1) return "";
+
+    const firstComment = thread.comments[0];
     const replies = thread.comments.slice(1);
     const repliesHtml = replies.map((r) => renderComment(r, true)).join("");
     const hasReplies = replies.length > 0;
@@ -210,14 +213,12 @@ function renderThread(thread: CommentThread) {
             <span>${escapeHtml(thread.path)}${thread.line ? ":" + escapeHtml(String(thread.line)) : ""}</span>
             ${resolvedBy}
           </div>
-          <!--
           <details class="diff-details">
             <summary class="diff-summary">View diff context</summary>
-            $ {renderDiffHunk(thread.diff_hunk)}
+            ${renderDiffHunk(firstComment.diff_hunk)}
           </details>
-          -->
           <div class="thread-comments">
-            ${renderComment(thread.comments[0])}
+            ${renderComment(firstComment)}
             ${hasReplies ? `<div class="thread-replies">${repliesHtml}</div>` : ""}
           </div>
       </div>

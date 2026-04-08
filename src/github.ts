@@ -17,6 +17,7 @@ export interface ReviewComment {
     created_at: Date;
     html_url: string;
     commit_id: string;
+    diff_hunk: string;
 }
 
 export interface Review {
@@ -128,7 +129,6 @@ export interface CommentThread {
     comments: ReviewComment[];
     path: string;
     line: number | null;
-    //diff_hunk: string;
     resolved_by: GitHubUser | null;
 }
 
@@ -230,6 +230,7 @@ async function getCommentThreads(
                       bodyHTML
                       commit { id }
                       createdAt
+                      diffHunk
                       url
                     }
                   }
@@ -274,6 +275,7 @@ async function getCommentThreads(
                     bodyHTML: respComment.bodyHTML,
                     commit_id: respComment.commit!.id,
                     created_at: new Date(respComment.createdAt),
+                    diff_hunk: respComment.diffHunk,
                     html_url: respComment.url,
                     user: actorToGithubUser(respComment.author!),
                 };
