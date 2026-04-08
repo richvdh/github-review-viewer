@@ -7,6 +7,7 @@ import {
     type Review,
     type ReviewComment,
 } from "./github";
+import { ThreadFilters } from "./threadFilters.ts";
 
 function renderResults(data: PRData): string {
     return `
@@ -14,7 +15,7 @@ function renderResults(data: PRData): string {
             ${renderHeader(data)}
             ${renderStats(data)}
             ${renderReviewSummaries(data.reviews)}
-            ${renderThreads(data.threads)}
+            ${renderThreads(data.whoami, data.threads)}
         </div>
     `;
 }
@@ -84,44 +85,10 @@ function renderReviewSummaries(reviews: Review[]): string {
     `;
 }
 
-class ThreadFilters {
-    public showResolvedThreads: boolean = true;
-    public showMyResolvedThreads: boolean = false;
-    public myLastCommentDate: string | undefined;
-
-    /** Filter the given list of threads, using this filter */
-    apply(threads: CommentThread[]): CommentThread[] {
-        const myLastCommentDate = this.myLastCommentDate
-            ? new Date(this.myLastCommentDate)
-            : undefined;
-
-        return threads.filter((t) => {
-            if (!this.showResolvedThreads && t.resolved_by) return false;
-
-            if (
-                !this.showMyResolvedThreads &&
-                t.resolved_by?.login === "richvdh"
-            ) {
-                return false;
-            }
-
-            if (myLastCommentDate) {
-                const idx = t.comments.findIndex(
-                    (c) =>
-                        c.user.login === "richvdh" &&
-                        c.created_at >= myLastCommentDate,
-                );
-                if (idx === -1) return false;
-            }
-
-            return true;
-        });
-    }
-}
-
 function renderThreads(
+    whoami: string,
     threads: CommentThread[],
-    threadFilters: ThreadFilters = new ThreadFilters(),
+    threadFilters: ThreadFilters = new ThreadFilters(whoami),
 ): string {
     if (threads.length === 0)
         return `<div class="empty-state">No inline review comments on this pull request.</div>`;
@@ -144,18 +111,24 @@ function renderThreadFilters(threadFilters: ThreadFilters): string {
     <div class="threads-filters">
         <form id="threads-filters-form">
             <div class="threads-filters-row">
-                <label for="threads-filters-show-resolved-threads">Show resolved threads</label>
-                <input type="checkbox" id="threads-filters-show-resolved-threads" ${threadFilters.showResolvedThreads ? "checked" : ""} />
+                <label for="threads-filters-show-unresolved-threads">Show unresolved threads</label>
+                <input type="checkbox" id="threads-filters-show-unresolved-threads" ${threadFilters.showUnresolvedThreads ? "checked" : ""} />
+            </div>
+
+            <div class="threads-filters-row">
+                <label for="threads-filters-show-other-resolved-threads">Show threads resolved by other users</label>
+                <input type="checkbox" id="threads-filters-show-other-resolved-threads" ${threadFilters.showOtherUserResolvedThreads ? "checked" : ""} />
             </div>
             
             <div class="threads-filters-row">
-                <label for="threads-filters-show-my resolved-threads">Show threads resolved by me</label>
+                <label for="threads-filters-show-my-resolved-threads">Show threads resolved by me</label>
                 <input type="checkbox" id="threads-filters-show-my-resolved-threads" ${threadFilters.showMyResolvedThreads ? "checked" : ""} />
             </div>
             
             <div class="threads-filters-row">    
-                <label for="threads-filters-my-last-comment">Show only threads I have commented on since:</label>
-                <input type="text" id="threads-filters-my-last-comment" value="${threadFilters.myLastCommentDate ? escapeHtml(threadFilters.myLastCommentDate) : ""}"/>
+                <label for="threads-filters-my-last-comment">Show threads I have commented on since:</label>
+                <input type="text" id="threads-filters-my-last-comment" value="${threadFilters.myLastCommentDate ? escapeHtml(threadFilters.myLastCommentDate) : ""}"
+                  placeholder="2026-04-01"/>
             </div>
             
             <div class="threads-filters-row">    
@@ -167,9 +140,9 @@ function renderThreadFilters(threadFilters: ThreadFilters): string {
 }
 
 /** Called after rendering to add listeners to the filters to rerender */
-function addFilterChangeHooks(threads: CommentThread[]): void {
-    const callback = () => updateThreadsList(threads);
-    // document.getElementById("threads-filters-show-resolved-threads")!.onchange =
+function addFilterChangeHooks(data: PRData): void {
+    const callback = () => updateThreadsList(data.whoami, data.threads);
+    // document.getElementById("threads-filters-show-other-resolved-threads")!.onchange =
     //     callback;
     document.getElementById("threads-filters-form")!.onsubmit = (e) => {
         e.preventDefault();
@@ -182,12 +155,18 @@ function addFilterChangeHooks(threads: CommentThread[]): void {
  *
  * Reads the state of the form, and updates the UI accordingly.
  */
-function updateThreadsList(threads: CommentThread[]): void {
-    const filter = new ThreadFilters();
+function updateThreadsList(whoami: string, threads: CommentThread[]): void {
+    const filter = new ThreadFilters(whoami);
 
-    filter.showResolvedThreads = (
+    filter.showUnresolvedThreads = (
         document.getElementById(
-            "threads-filters-show-resolved-threads",
+            "threads-filters-show-unresolved-threads",
+        ) as HTMLInputElement
+    ).checked;
+
+    filter.showOtherUserResolvedThreads = (
+        document.getElementById(
+            "threads-filters-show-other-resolved-threads",
         ) as HTMLInputElement
     ).checked;
 
@@ -209,6 +188,8 @@ function updateThreadsList(threads: CommentThread[]): void {
     document.getElementById("thread-comments-count")!.innerText = String(
         filtered.length,
     );
+
+    // TODO: add to
 }
 
 function renderThread(thread: CommentThread) {
@@ -351,7 +332,7 @@ export function renderApp(root: HTMLElement): void {
               <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
               <span>PR Review Viewer</span>
             </div>
-            <button class="token-btn" id="token-toggle">
+            <button class="secondary" id="token-toggle">
               <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M0 5.5l4.5 4.5L10 2.5" stroke="currentColor" stroke-width="1.5" fill="none"/><path fill-rule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 1.5a6.5 6.5 0 110 13 6.5 6.5 0 010-13z"/></svg>
               ${token ? "🔑 Token set" : "Add token"}
             </button>
@@ -467,7 +448,7 @@ export function renderApp(root: HTMLElement): void {
             try {
                 const data = await fetchPRData(parsed, token || undefined);
                 root.querySelector("#output")!.innerHTML = renderResults(data);
-                addFilterChangeHooks(data.threads);
+                addFilterChangeHooks(data);
             } catch (err) {
                 root.querySelector("#output")!.innerHTML = `
           <div class="error">

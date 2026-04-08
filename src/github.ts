@@ -116,6 +116,7 @@ async function fetchAllPages<T>(path: string, token?: string): Promise<T[]> {
 }
 
 export interface PRData {
+    whoami: string;
     pr: PullRequest;
     reviews: Review[];
     threads: CommentThread[];
@@ -125,6 +126,7 @@ export async function fetchPRData(
     parsed: ParsedPRUrl,
     token?: string,
 ): Promise<PRData> {
+    const whoami = "richvdh"; // TODO
     const base = `/repos/${parsed.owner}/${parsed.repo}/pulls/${parsed.number}`;
 
     const [pr, reviews, threads] = await Promise.all([
@@ -133,7 +135,7 @@ export async function fetchPRData(
         getCommentThreads(parsed, token),
     ]);
 
-    return { pr, reviews, threads };
+    return { whoami, pr, reviews, threads };
 }
 
 export interface CommentThread {
