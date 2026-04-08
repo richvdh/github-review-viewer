@@ -17,6 +17,7 @@ export interface ReviewComment {
     created_at: Date;
     html_url: string;
     diff_hunk: string;
+    commitSHA: string;
 }
 
 export interface Review {
@@ -218,6 +219,7 @@ async function getCommentThreads(
                       bodyHTML
                       createdAt
                       diffHunk
+                      originalCommit { abbreviatedOid } 
                       url
                     }
                   }
@@ -261,6 +263,7 @@ async function getCommentThreads(
             for (const c of respThread.comments.nodes!) {
                 const respComment = c!;
                 const comment: ReviewComment = {
+                    commitSHA: respComment.originalCommit!.abbreviatedOid,
                     bodyHTML: respComment.bodyHTML,
                     created_at: new Date(respComment.createdAt),
                     diff_hunk: respComment.diffHunk,

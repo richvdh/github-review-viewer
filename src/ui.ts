@@ -213,7 +213,7 @@ function renderThread(thread: CommentThread) {
     const html = `
       <div class="thread">
           <div class="thread-header">
-            <span>${escapeHtml(thread.path)}${linerange}</span>
+            <span>${escapeHtml(thread.path)}${linerange} ${firstComment.commitSHA}</span>
             ${resolvedBy}
           </div>
           ${renderDiffHunk(firstComment.diff_hunk, thread.startLine, thread.endLine)}
