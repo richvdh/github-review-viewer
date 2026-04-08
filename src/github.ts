@@ -1,5 +1,8 @@
 import { Octokit } from "@octokit/core";
-import { paginateGraphQL } from "@octokit/plugin-paginate-graphql";
+import {
+    paginateGraphQL,
+    paginateGraphQLInterface,
+} from "@octokit/plugin-paginate-graphql";
 import type { Actor, Repository } from "@octokit/graphql-schema";
 
 export interface GitHubUser {
@@ -17,9 +20,8 @@ export interface ReviewComment {
 }
 
 export interface Review {
-    id: number;
     user: GitHubUser;
-    body: string;
+    bodyHTML: string;
     state:
         | "APPROVED"
         | "CHANGES_REQUESTED"
@@ -122,22 +124,6 @@ export interface PRData {
     threads: CommentThread[];
 }
 
-export async function fetchPRData(
-    parsed: ParsedPRUrl,
-    token?: string,
-): Promise<PRData> {
-    const whoami = "richvdh"; // TODO
-    const base = `/repos/${parsed.owner}/${parsed.repo}/pulls/${parsed.number}`;
-
-    const [pr, reviews, threads] = await Promise.all([
-        ghFetch<PullRequest>(base, token),
-        fetchAllPages<Review>(`${base}/reviews`, token),
-        getCommentThreads(parsed, token),
-    ]);
-
-    return { whoami, pr, reviews, threads };
-}
-
 export interface CommentThread {
     comments: ReviewComment[];
     path: string;
@@ -146,12 +132,81 @@ export interface CommentThread {
     resolved_by: GitHubUser | null;
 }
 
-export async function getCommentThreads(
+export async function fetchPRData(
     parsed: ParsedPRUrl,
     token?: string,
-): Promise<CommentThread[]> {
+): Promise<PRData> {
+    const whoami = "richvdh"; // TODO
+    const base = `/repos/${parsed.owner}/${parsed.repo}/pulls/${parsed.number}`;
+
     const MyOctokit = Octokit.plugin(paginateGraphQL);
     const octokit = new MyOctokit({ auth: token });
+
+    const [pr, reviews, threads] = await Promise.all([
+        ghFetch<PullRequest>(base, token),
+        getReviews(octokit, parsed),
+        getCommentThreads(octokit, parsed),
+    ]);
+
+    return { whoami, pr, reviews, threads };
+}
+
+async function getReviews(
+    octokit: Octokit & paginateGraphQLInterface,
+    parsed: ParsedPRUrl,
+): Promise<Review[]> {
+    const respIterator = octokit.graphql.paginate.iterator<{
+        repository: Repository;
+    }>(
+        `
+        query paginate($cursor: String, $owner: String!, $repo: String!, $prNumber: Int!) {
+          repository(owner: $owner, name: $repo){
+            pullRequest(number: $prNumber){
+              reviews(first: 100, after: $cursor) {
+                pageInfo {
+                  hasNextPage
+                  endCursor
+                }
+                nodes {
+                  author { login avatarUrl url }
+                  bodyHTML
+                  state
+                  submittedAt
+                  url
+                }
+              }
+            }
+          }
+        }`,
+        {
+            cursor: "",
+            owner: parsed.owner,
+            repo: parsed.repo,
+            prNumber: parsed.number,
+        },
+    );
+
+    const result: Review[] = [];
+    for await (const resp of respIterator) {
+        for (const r of resp.repository.pullRequest!.reviews!.nodes!) {
+            const reviewResp = r!;
+            result.push({
+                user: actorToGithubUser(reviewResp.author!),
+                bodyHTML: reviewResp.bodyHTML,
+                state: reviewResp.state,
+                submitted_at: reviewResp.submittedAt,
+                html_url: reviewResp.url,
+            });
+        }
+    }
+
+    return result;
+}
+
+async function getCommentThreads(
+    octokit: Octokit & paginateGraphQLInterface,
+    parsed: ParsedPRUrl,
+): Promise<CommentThread[]> {
     const threadIterator = octokit.graphql.paginate.iterator<{
         repository: Repository;
     }>(

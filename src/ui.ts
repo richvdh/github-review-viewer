@@ -60,7 +60,7 @@ function renderReviewSummaries(reviews: Review[]): string {
     // Exclude reviews with no body and where the state is just "COMMENTED": they are fully represented
     // via the comments section.
     const filteredReviews = reviews.filter(
-        (r) => r.body || r.state !== "COMMENTED",
+        (r) => r.bodyHTML || r.state !== "COMMENTED",
     );
     if (filteredReviews.length === 0) return "";
 
@@ -72,7 +72,7 @@ function renderReviewSummaries(reviews: Review[]): string {
           ${renderReviewBadge(r.state)}
           <span class="comment-date">${formatDate(new Date(r.submitted_at))}</span>
         </div>
-        ${r.body ? `<div class="comment-body">${renderMarkdown(r.body)}</div>` : ""}
+        ${r.bodyHTML ? `<div class="comment-body">${r.bodyHTML}</div>` : ""}
       </div>
     `,
     );
@@ -241,31 +241,6 @@ function escapeHtml(str: string): string {
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
-}
-
-// Very basic markdown → HTML: bold, italic, inline code, code blocks, links
-function renderMarkdown(md: string): string {
-    if (!md) return "";
-    let html = escapeHtml(md);
-    // Code blocks
-    html = html.replace(/```[\s\S]*?```/g, (match) => {
-        const inner = match.slice(3, -3).replace(/^[^\n]*\n?/, "");
-        return `<pre class="md-code-block"><code>${inner}</code></pre>`;
-    });
-    // Inline code
-    html = html.replace(/`([^`]+)`/g, '<code class="md-inline-code">$1</code>');
-    // Bold
-    html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
-    // Italic
-    html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
-    // Links
-    html = html.replace(
-        /\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,
-        '<a href="$2" target="_blank" rel="noopener">$1</a>',
-    );
-    // Newlines → <br>
-    html = html.replace(/\n/g, "<br>");
-    return html;
 }
 
 function renderDiffHunk(hunk: string): string {
