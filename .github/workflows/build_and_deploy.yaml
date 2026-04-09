@@ -3,6 +3,8 @@ on:
     branches:
       - main
 
+permissions: {}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,16 +20,16 @@ jobs:
       - name: Setup node and dependency caches
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
-           cache: "pnpm"
-           cache-dependency-path: pnpm-lock.yaml
-           node-version: "lts/*"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+          node-version: "lts/*"
 
-     - name: build
-       run: pnpm run build
+      - name: build
+        run: pnpm run build
 
-     - name: Upload artifact
-       uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
-       with:
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
+        with:
           path: ./dist
       
   # Deploy job
