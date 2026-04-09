@@ -86,7 +86,7 @@ function renderReviewSummaries(reviews: Review[]): string {
 }
 
 function renderThreads(
-    whoami: string,
+    whoami: string | null,
     threads: CommentThread[],
     threadFilters: ThreadFilters = new ThreadFilters(whoami),
 ): string {
@@ -107,6 +107,8 @@ function renderThreads(
 }
 
 function renderThreadFilters(threadFilters: ThreadFilters): string {
+    const disableMyUserFilters = threadFilters.whoami === null;
+
     return `
     <div class="threads-filters">
         <form id="threads-filters-form">
@@ -122,15 +124,20 @@ function renderThreadFilters(threadFilters: ThreadFilters): string {
 
             <div class="threads-filters-row">    
                 <label for="threads-filters-my-last-comment">Threads which I have commented on since:</label>
-                <input type="text" id="threads-filters-my-last-comment" value="${threadFilters.myLastCommentDate ? escapeHtml(threadFilters.myLastCommentDate) : ""}"
-                  placeholder="2026-04-01"/>
+                <input type="text" id="threads-filters-my-last-comment" placeholder="2026-04-01"
+                    value="${threadFilters.myLastCommentDate ? escapeHtml(threadFilters.myLastCommentDate) : ""}" 
+                    ${disableMyUserFilters ? "disabled" : ""}
+                />
                 <label>... and which:</label>
             </div>
 
             <div style="padding-left: 30px">
                 <div class="threads-filters-row">
                     <label for="threads-filters-hide-my-resolved-threads">have not been resolved by me</label>
-                    <input type="checkbox" id="threads-filters-hide-my-resolved-threads" ${threadFilters.hideMyResolvedThreads ? "checked" : ""} />
+                    <input type="checkbox" id="threads-filters-hide-my-resolved-threads" 
+                         ${threadFilters.hideMyResolvedThreads ? "checked" : ""}
+                         ${disableMyUserFilters ? "disabled" : ""}
+                    />
                 </div>            
             </div>
             
@@ -156,7 +163,10 @@ function addFilterChangeHooks(data: PRData): void {
  *
  * Reads the state of the form, and updates the UI accordingly.
  */
-function updateThreadsList(whoami: string, threads: CommentThread[]): void {
+function updateThreadsList(
+    whoami: string | null,
+    threads: CommentThread[],
+): void {
     const filter = new ThreadFilters(whoami);
 
     filter.showAllThreads = (

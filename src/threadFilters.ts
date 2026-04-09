@@ -10,7 +10,7 @@ export class ThreadFilters {
     public myLastCommentDate: string | undefined;
     public hideMyResolvedThreads: boolean = true;
 
-    public constructor(public readonly whoami: String) {}
+    public constructor(public readonly whoami: string | null) {}
 
     /** Filter the given list of threads, using this filter */
     apply(threads: CommentThread[]): CommentThread[] {
@@ -23,7 +23,7 @@ export class ThreadFilters {
 
             if (this.showUnresolvedThreads && !t.resolved_by) return true;
 
-            if (myLastCommentDate) {
+            if (this.whoami && myLastCommentDate) {
                 const idx = t.comments.findIndex(
                     (c) =>
                         c.user.login === this.whoami &&

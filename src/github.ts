@@ -101,7 +101,9 @@ async function ghFetch<T>(path: string, token?: string): Promise<T> {
 }
 
 export interface PRData {
-    whoami: string;
+    /** The caller's user ID, or `null` if we don't have an auth token */
+    whoami: string | null;
+
     pr: PullRequest;
     reviews: Review[];
     threads: CommentThread[];
@@ -129,13 +131,13 @@ export async function fetchPRData(
     parsed: ParsedPRUrl,
     token?: string,
 ): Promise<PRData> {
-    const whoami = "richvdh"; // TODO
     const base = `/repos/${parsed.owner}/${parsed.repo}/pulls/${parsed.number}`;
 
     const MyOctokit = Octokit.plugin(paginateGraphQL);
     const octokit = new MyOctokit({ auth: token });
 
-    const [pr, reviews, threads] = await Promise.all([
+    const [whoami, pr, reviews, threads] = await Promise.all([
+        token ? getViewerLogin(octokit) : null,
         ghFetch<PullRequest>(base, token),
         getReviews(octokit, parsed),
         getCommentThreads(octokit, parsed),
@@ -144,8 +146,10 @@ export async function fetchPRData(
     return { whoami, pr, reviews, threads };
 }
 
+type OctokitWithPlugin = Octokit & paginateGraphQLInterface;
+
 async function getReviews(
-    octokit: Octokit & paginateGraphQLInterface,
+    octokit: OctokitWithPlugin,
     parsed: ParsedPRUrl,
 ): Promise<Review[]> {
     const respIterator = octokit.graphql.paginate.iterator<{
@@ -197,7 +201,7 @@ async function getReviews(
 }
 
 async function getCommentThreads(
-    octokit: Octokit & paginateGraphQLInterface,
+    octokit: OctokitWithPlugin,
     parsed: ParsedPRUrl,
 ): Promise<CommentThread[]> {
     const threadIterator = octokit.graphql.paginate.iterator<{
@@ -276,6 +280,14 @@ async function getCommentThreads(
     }
 
     return result;
+}
+
+/** Get the login of the user that owns the access token */
+async function getViewerLogin(octokit: Octokit): Promise<string> {
+    const resp = await octokit.graphql<{ viewer: Actor }>(
+        `query { viewer { login }}`,
+    );
+    return resp.viewer.login;
 }
 
 /** Convert a GraphQL {@link https://docs.github.com/en/graphql/reference/interfaces#actor|Actor} into a
