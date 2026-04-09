@@ -24,7 +24,7 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
           node-version: "lts/*"
 
-      - name: Build
+      - name: Install deps and build
         run: |
           pnpm install
           pnpm run build
