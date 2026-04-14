@@ -28,16 +28,7 @@ export function renderApp(root: HTMLElement): void {
 }
 
 /** Render the basic page, without any thread details. */
-function render(root: HTMLElement, loading = false): void {
-    const content = loading
-        ? `
-          <div class="loading">
-            <div class="loading-spinner"></div>
-            <span>Fetching review comments…</span>
-          </div>
-        `
-        : "";
-
+function render(root: HTMLElement): void {
     const token = getToken() || "";
 
     root.innerHTML = `
@@ -91,7 +82,7 @@ function render(root: HTMLElement, loading = false): void {
             </div>
           </div>
 
-          <div id="output">${content}</div>
+          <div id="output"></div>
         </main>
       </div>
     `;
@@ -146,7 +137,14 @@ function setupHandlers(root: HTMLElement): void {
         }
 
         history.replaceState(null, "", `?url=${encodeURIComponent(url)}`);
-        render(root, true);
+        render(root);
+
+        setOutput(`
+          <div class="loading">
+            <div class="loading-spinner"></div>
+            <span>Fetching review comments…</span>
+          </div>
+        `);
 
         // Re-populate input after loading re-render
         const input = root.querySelector<HTMLInputElement>("#pr-url");
@@ -154,16 +152,21 @@ function setupHandlers(root: HTMLElement): void {
 
         try {
             const data = await fetchPRData(parsed, getToken() || undefined);
-            root.querySelector("#output")!.innerHTML = renderResults(data);
+            setOutput(renderResults(data));
             addFilterChangeHooks(data);
         } catch (err) {
-            root.querySelector("#output")!.innerHTML = `
-          <div class="error">
-            <strong>Error:</strong> ${escapeHtml(err instanceof Error ? err.message : String(err))}
-          </div>
-        `;
+            setOutput(`
+              <div class="error">
+                <strong>Error:</strong> ${escapeHtml(err instanceof Error ? err.message : String(err))}
+              </div>
+            `);
         }
     });
+}
+
+/** Set the content of the `#output` div */
+function setOutput(content: string): void {
+    document.querySelector("#output")!.innerHTML = content;
 }
 
 function renderResults(data: PRData): string {
