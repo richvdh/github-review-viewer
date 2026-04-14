@@ -110,6 +110,9 @@ export interface PRData {
 }
 
 export interface CommentThread {
+    /** The Node ID of the PullRequestReviewThread object. */
+    id: string;
+
     comments: ReviewComment[];
     path: string;
 
@@ -228,6 +231,7 @@ async function getCommentThreads(
                     }
                   }
                   diffSide
+                  id
                   originalLine
                   originalStartLine
                   path
@@ -251,6 +255,7 @@ async function getCommentThreads(
         for (const t of resp.repository.pullRequest!.reviewThreads.nodes!) {
             const respThread = t!;
             const thread: CommentThread = {
+                id: respThread.id,
                 comments: [],
                 path: respThread.path,
                 startLine: respThread.originalStartLine ?? null,
@@ -299,4 +304,18 @@ function actorToGithubUser(actor: Actor): GitHubUser {
         html_url: actor.url,
         login: actor.login,
     };
+}
+
+/** Mark the given review thread as resolved. */
+export async function resolveReviewThread(
+    threadId: string,
+    token: string,
+): Promise<void> {
+    const octokit = new Octokit({ auth: token });
+    return await octokit.graphql(
+        `mutation ResolveReviewThread($threadId: ID!) {
+            resolveReviewThread(input: {threadId: $threadId}) { clientMutationId }
+        }`,
+        { threadId },
+    );
 }

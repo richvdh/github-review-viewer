@@ -26,4 +26,6 @@ pnpm dev
 * Include the filters in the query params
 * Line numbers on diffs
 * Fix the diff filtering to take into account whether the comment range is on the old or new version of the file
-* Allow users to submit comments/replies from the app?
+* Submit comments/replies
+* Unresolve threads
+* Better UI updates on resolve

@@ -19,6 +19,7 @@
     --accent-glow: #4caf7d1f;
     --accent-bright: #5dca93;
     --diffBlob-additionWord-bgColor: #2ea04366;
+    --disabled-button: #505050;
     --red: #e05c5c;
     --red-dim: #5c2020;
     --red-bg: #e05c5c14;
@@ -101,6 +102,11 @@ input[type="submit"] {
 button:hover,
 input[type="submit"]:hover {
     background: var(--accent-bright);
+}
+
+button:disabled,
+input[type="submit"]:disabled {
+    background: var(--disabled-button);
 }
 
 button.secondary {
@@ -550,6 +556,7 @@ button.token-clear-btn {
     margin-bottom: 24px;
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
+    background: var(--surface);
 }
 
 .thread-header {
@@ -568,6 +575,25 @@ button.token-clear-btn {
     display: flex;
     gap: 8px;
 }
+
+.thread-comments {
+    border-top: 1px solid var(--border-2);
+    padding-top: 12px;
+}
+
+.thread-replies {
+    border-top: 1px solid var(--border);
+    padding-top: 4px;
+    padding-bottom: 12px;
+}
+
+.thread-buttons {
+    border-top: 1px solid var(--border-2);
+    padding-top: 12px;
+    padding-left: 16px;
+    padding-bottom: 12px;
+}
+
 
 /* ── Diff Hunk and Suggestions ─────────────────────────────────────────────── */
 .diff-details {
@@ -651,18 +677,6 @@ details[open] > .diff-summary::before {
 }
 
 /* ── Comments ──────────────────────────────────────────────────────────────── */
-.thread-comments {
-    background: var(--surface);
-    border-top: 1px solid var(--border-2);
-    padding: 12px 0;
-}
-
-.thread-replies {
-    margin-top: 4px;
-    border-top: 1px solid var(--border);
-    padding-top: 4px;
-}
-
 .comment {
     padding: 10px 16px;
 }

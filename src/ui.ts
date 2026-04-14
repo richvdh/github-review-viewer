@@ -4,6 +4,7 @@ import {
     GitHubUser,
     parsePRUrl,
     type PRData,
+    resolveReviewThread,
     type Review,
     type ReviewComment,
 } from "./github";
@@ -159,6 +160,29 @@ function addFilterChangeHooks(data: PRData): void {
         e.preventDefault();
         callback();
     };
+
+    const token = localStorage.getItem("gh_token");
+    if (!token) return;
+
+    const resolveThreadHandler = async (e: PointerEvent) => {
+        const btn = e.target! as HTMLButtonElement;
+        const threadId = btn.dataset.threadId;
+        if (!threadId) return;
+
+        btn.disabled = true;
+        try {
+            await resolveReviewThread(threadId, token);
+        } catch (e) {
+            btn.disabled = false;
+            alert(e);
+        }
+    };
+
+    for (const btn of document.querySelectorAll<HTMLButtonElement>(
+        ".resolve-btn",
+    )) {
+        btn.addEventListener("click", resolveThreadHandler);
+    }
 }
 
 /**
@@ -208,6 +232,7 @@ function updateThreadsList(
 
 function renderThread(thread: CommentThread) {
     if (thread.comments.length < 1) return "";
+    let token = localStorage.getItem("gh_token") ?? "";
 
     const firstComment = thread.comments[0];
     const replies = thread.comments.slice(1);
@@ -223,6 +248,12 @@ function renderThread(thread: CommentThread) {
 
     const linerange = `:${thread.startLine ? thread.startLine + "-" : ""}${thread.endLine}`;
 
+    const buttons = !token
+        ? ""
+        : thread.resolved_by
+          ? ""
+          : `<button type="submit" class="resolve-btn" data-thread-id="${thread.id}">Resolve</button>`;
+
     const html = `
       <div class="thread">
           <div class="thread-header">
@@ -234,6 +265,8 @@ function renderThread(thread: CommentThread) {
             ${renderComment(firstComment)}
             ${hasReplies ? `<div class="thread-replies">${repliesHtml}</div>` : ""}
           </div>
+          ${buttons ? `<div class="thread-buttons">${buttons}</div>` : ""}
+        </div>
       </div>
     `;
     return html;
