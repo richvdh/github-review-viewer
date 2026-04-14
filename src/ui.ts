@@ -19,11 +19,7 @@ export function renderApp(root: HTMLElement): void {
     const urlParam = new URLSearchParams(location.search).get("url");
     render(root);
     if (urlParam) {
-        const input = root.querySelector<HTMLInputElement>("#pr-url");
-        if (input) {
-            input.value = urlParam;
-            input.closest("form")?.dispatchEvent(new Event("submit"));
-        }
+        loadPullRequest(root, urlParam);
     }
 }
 
@@ -125,43 +121,47 @@ function setupHandlers(root: HTMLElement): void {
         e.preventDefault();
         const url =
             root.querySelector<HTMLInputElement>("#pr-url")?.value ?? "";
-        const parsed = parsePRUrl(url);
-        if (!parsed) {
-            root.querySelector("#output")!.innerHTML = `
+        loadPullRequest(root, url);
+    });
+}
+
+async function loadPullRequest(root: HTMLElement, prURL: string) {
+    const parsed = parsePRUrl(prURL);
+    if (!parsed) {
+        root.querySelector("#output")!.innerHTML = `
               <div class="error">
                 <strong>Invalid URL.</strong> Please enter a GitHub pull request URL like:<br/>
                 <code>https://github.com/owner/repo/pull/123</code>
               </div>
             `;
-            return;
-        }
+        return;
+    }
 
-        history.replaceState(null, "", `?url=${encodeURIComponent(url)}`);
-        render(root);
+    history.replaceState(null, "", `?url=${encodeURIComponent(prURL)}`);
 
-        setOutput(`
+    setOutput(`
           <div class="loading">
             <div class="loading-spinner"></div>
             <span>Fetching review comments…</span>
           </div>
         `);
 
-        // Re-populate input after loading re-render
-        const input = root.querySelector<HTMLInputElement>("#pr-url");
-        if (input) input.value = url;
+    // Re-populate input after loading re-render
+    const input = root.querySelector<HTMLInputElement>("#pr-url");
+    if (input) input.value = prURL;
 
-        try {
-            const data = await fetchPRData(parsed, getToken() || undefined);
-            setOutput(renderResults(data));
-            addFilterChangeHooks(data);
-        } catch (err) {
-            setOutput(`
-              <div class="error">
-                <strong>Error:</strong> ${escapeHtml(err instanceof Error ? err.message : String(err))}
-              </div>
-            `);
-        }
-    });
+    try {
+        const data = await fetchPRData(parsed, getToken() || undefined);
+        setOutput(renderResults(data));
+        addFilterChangeHooks(data);
+    } catch (err) {
+        console.error(err);
+        setOutput(`
+          <div class="error">
+            <strong>Error:</strong> ${escapeHtml(err instanceof Error ? err.message : String(err))}
+          </div>
+        `);
+    }
 }
 
 /** Set the content of the `#output` div */
