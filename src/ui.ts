@@ -232,7 +232,6 @@ function updateThreadsList(
 
 function renderThread(thread: CommentThread) {
     if (thread.comments.length < 1) return "";
-    const token = localStorage.getItem("gh_token");
 
     const firstComment = thread.comments[0];
     const replies = thread.comments.slice(1);
@@ -248,11 +247,11 @@ function renderThread(thread: CommentThread) {
 
     const linerange = `:${thread.startLine ? thread.startLine + "-" : ""}${thread.endLine}`;
 
-    const buttons = !token
-        ? ""
-        : thread.resolved_by
-          ? ""
-          : `<button type="submit" class="resolve-btn" data-thread-id="${thread.id}">Resolve</button>`;
+    const buttons = [
+        thread.canResolve
+            ? `<button type="submit" class="resolve-btn" data-thread-id="${thread.id}">Resolve</button>`
+            : "",
+    ];
 
     const html = `
       <div class="thread">
@@ -265,7 +264,7 @@ function renderThread(thread: CommentThread) {
             ${renderComment(firstComment)}
             ${hasReplies ? `<div class="thread-replies">${repliesHtml}</div>` : ""}
           </div>
-          ${buttons ? `<div class="thread-buttons">${buttons}</div>` : ""}
+          ${buttons.length > 0 ? `<div class="thread-buttons">${buttons.join("")}</div>` : ""}
         </div>
       </div>
     `;

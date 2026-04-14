@@ -128,6 +128,9 @@ export interface CommentThread {
     endDiffSide: DiffSide;
 
     resolved_by: GitHubUser | null;
+
+    /** Whether the user can resolve this thread. */
+    canResolve: boolean;
 }
 
 export async function fetchPRData(
@@ -226,7 +229,7 @@ async function getCommentThreads(
                       bodyHTML
                       createdAt
                       diffHunk
-                      originalCommit { abbreviatedOid } 
+                      originalCommit { abbreviatedOid }
                       url
                     }
                   }
@@ -237,6 +240,7 @@ async function getCommentThreads(
                   path
                   resolvedBy { login avatarUrl url }
                   startDiffSide
+                  viewerCanResolve
                 }
               }
             }
@@ -266,6 +270,7 @@ async function getCommentThreads(
                     (respThread.resolvedBy &&
                         actorToGithubUser(respThread.resolvedBy)) ??
                     null,
+                canResolve: respThread.viewerCanResolve,
             };
             result.push(thread);
 
