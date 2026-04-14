@@ -24,16 +24,17 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
           node-version: "lts/*"
 
-      - name: Install deps and build
+      - name: Install deps, lint, and build
         run: |
           pnpm install
+          pnpm run lint
           pnpm run build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
           path: ./dist
-      
+
   # Deploy job
   deploy:
     # Add a dependency to the build job
