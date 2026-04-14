@@ -437,7 +437,7 @@ export function renderApp(root: HTMLElement): void {
               </div>
             </form>
             <div id="token-panel" class="token-panel hidden">
-              <label class="token-label">GitHub Personal Access Token <span class="token-hint">(optional — needed for private repos or if rate limited)</span></label>
+              <label class="token-label">GitHub Personal Access Token <span class="token-hint">(optional — needed to access private repos, to update reviews, or if rate limited)</span></label>
               <div class="token-row">
                 <input type="password" id="token-input" class="token-input" placeholder="ghp_..." value="${escapeHtml(token)}" />
                 <button id="token-save" class="token-save-btn">Save</button>
