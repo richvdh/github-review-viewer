@@ -13,6 +13,159 @@ import { ThreadFilters } from "./threadFilters.ts";
 /** The target of the link from the header */
 const REPO_LINK = "https://github.com/richvdh/github-review-viewer";
 
+/** Main entry point */
+export function renderApp(root: HTMLElement): void {
+    // Check for URL param on load
+    const urlParam = new URLSearchParams(location.search).get("url");
+    render(root);
+    if (urlParam) {
+        const input = root.querySelector<HTMLInputElement>("#pr-url");
+        if (input) {
+            input.value = urlParam;
+            input.closest("form")?.dispatchEvent(new Event("submit"));
+        }
+    }
+}
+
+/** Render the basic page, without any thread details. */
+function render(root: HTMLElement, loading = false): void {
+    const content = loading
+        ? `
+          <div class="loading">
+            <div class="loading-spinner"></div>
+            <span>Fetching review comments…</span>
+          </div>
+        `
+        : "";
+
+    const token = getToken() || "";
+
+    root.innerHTML = `
+      <div class="app">
+        <header class="app-header">
+          <div class="header-inner">
+            <div class="logo">
+              <a href="${encodeURI(REPO_LINK)}">
+                <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                <span>PR Review Viewer</span>
+              </a>
+            </div>
+            <button class="secondary" id="token-toggle">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M0 5.5l4.5 4.5L10 2.5" stroke="currentColor" stroke-width="1.5" fill="none"/><path fill-rule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 1.5a6.5 6.5 0 110 13 6.5 6.5 0 010-13z"/></svg>
+              ${getToken() ? "🔑 Token set" : "Add token"}
+            </button>
+          </div>
+        </header>
+
+        <main class="app-main">
+          <div class="search-section">
+            <p class="search-hint">Paste a GitHub Pull Request URL to view all review comments</p>
+            <form id="pr-form" class="search-form">
+              <div class="input-group">
+                <input
+                  type="url"
+                  id="pr-url"
+                  class="pr-input"
+                  placeholder="https://github.com/owner/repo/pull/123"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <button type="submit" class="fetch-btn">
+                  <span>Fetch</span>
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
+                </button>
+              </div>
+            </form>
+            <div id="token-panel" class="token-panel hidden">
+              <label class="token-label">GitHub Personal Access Token <span class="token-hint">(optional — needed to access private repos, to update reviews, or if rate limited)</span></label>
+              <div class="token-row">
+                <input type="password" id="token-input" class="token-input" placeholder="ghp_..." value="${escapeHtml(token)}" />
+                <button id="token-save" class="token-save-btn">Save</button>
+                <button id="token-clear" class="token-clear-btn">Clear</button>
+              </div>
+              <p>
+                To create a token, go to <a href="https://github.com/settings/tokens/new" target="_">https://github.com/settings/tokens/new</a>
+                and authenticate. Then select the "repo" scope, and, optionally, change the expiration date. 
+                Finally, click "Generate token". Copy the token from the next screen, and paste it here.
+              </p>
+            </div>
+          </div>
+
+          <div id="output">${content}</div>
+        </main>
+      </div>
+    `;
+
+    // Restore input value after re-render
+    const input = root.querySelector<HTMLInputElement>("#pr-url");
+    const urlParam = new URLSearchParams(location.search).get("url");
+    if (input && urlParam) input.value = urlParam;
+
+    setupHandlers(root);
+}
+
+/** Called after render, to add handlers to the elements */
+function setupHandlers(root: HTMLElement): void {
+    const form = root.querySelector<HTMLFormElement>("#pr-form");
+    const tokenToggle = root.querySelector<HTMLButtonElement>("#token-toggle");
+    const tokenPanel = root.querySelector<HTMLDivElement>("#token-panel");
+    const tokenSave = root.querySelector<HTMLButtonElement>("#token-save");
+    const tokenClear = root.querySelector<HTMLButtonElement>("#token-clear");
+
+    tokenToggle?.addEventListener("click", () => {
+        tokenPanel?.classList.toggle("hidden");
+    });
+
+    tokenSave?.addEventListener("click", () => {
+        const val =
+            root.querySelector<HTMLInputElement>("#token-input")?.value ?? "";
+        localStorage.setItem("gh_token", val);
+        tokenPanel?.classList.add("hidden");
+        render(root);
+    });
+
+    tokenClear?.addEventListener("click", () => {
+        localStorage.removeItem("gh_token");
+        const ti = root.querySelector<HTMLInputElement>("#token-input");
+        if (ti) ti.value = "";
+    });
+
+    form?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const url =
+            root.querySelector<HTMLInputElement>("#pr-url")?.value ?? "";
+        const parsed = parsePRUrl(url);
+        if (!parsed) {
+            root.querySelector("#output")!.innerHTML = `
+              <div class="error">
+                <strong>Invalid URL.</strong> Please enter a GitHub pull request URL like:<br/>
+                <code>https://github.com/owner/repo/pull/123</code>
+              </div>
+            `;
+            return;
+        }
+
+        history.replaceState(null, "", `?url=${encodeURIComponent(url)}`);
+        render(root, true);
+
+        // Re-populate input after loading re-render
+        const input = root.querySelector<HTMLInputElement>("#pr-url");
+        if (input) input.value = url;
+
+        try {
+            const data = await fetchPRData(parsed, getToken() || undefined);
+            root.querySelector("#output")!.innerHTML = renderResults(data);
+            addFilterChangeHooks(data);
+        } catch (err) {
+            root.querySelector("#output")!.innerHTML = `
+          <div class="error">
+            <strong>Error:</strong> ${escapeHtml(err instanceof Error ? err.message : String(err))}
+          </div>
+        `;
+        }
+    });
+}
+
 function renderResults(data: PRData): string {
     return `
         <div class="results">
@@ -395,160 +548,7 @@ function renderReviewBadge(state: Review["state"]): string {
     return `<span class="badge ${cls}">${label}</span>`;
 }
 
-export function renderApp(root: HTMLElement): void {
-    let token = localStorage.getItem("gh_token") ?? "";
-
-    function getHtml(content: string): string {
-        return `
-      <div class="app">
-        <header class="app-header">
-          <div class="header-inner">
-            <div class="logo">
-              <a href="${encodeURI(REPO_LINK)}">
-                <svg width="20" height="20" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-                <span>PR Review Viewer</span>
-              </a>
-            </div>
-            <button class="secondary" id="token-toggle">
-              <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M0 5.5l4.5 4.5L10 2.5" stroke="currentColor" stroke-width="1.5" fill="none"/><path fill-rule="evenodd" d="M8 0a8 8 0 100 16A8 8 0 008 0zm0 1.5a6.5 6.5 0 110 13 6.5 6.5 0 010-13z"/></svg>
-              ${token ? "🔑 Token set" : "Add token"}
-            </button>
-          </div>
-        </header>
-
-        <main class="app-main">
-          <div class="search-section">
-            <p class="search-hint">Paste a GitHub Pull Request URL to view all review comments</p>
-            <form id="pr-form" class="search-form">
-              <div class="input-group">
-                <input
-                  type="url"
-                  id="pr-url"
-                  class="pr-input"
-                  placeholder="https://github.com/owner/repo/pull/123"
-                  autocomplete="off"
-                  spellcheck="false"
-                />
-                <button type="submit" class="fetch-btn">
-                  <span>Fetch</span>
-                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h10M9 4l4 4-4 4"/></svg>
-                </button>
-              </div>
-            </form>
-            <div id="token-panel" class="token-panel hidden">
-              <label class="token-label">GitHub Personal Access Token <span class="token-hint">(optional — needed to access private repos, to update reviews, or if rate limited)</span></label>
-              <div class="token-row">
-                <input type="password" id="token-input" class="token-input" placeholder="ghp_..." value="${escapeHtml(token)}" />
-                <button id="token-save" class="token-save-btn">Save</button>
-                <button id="token-clear" class="token-clear-btn">Clear</button>
-              </div>
-              <p>
-                To create a token, go to <a href="https://github.com/settings/tokens/new" target="_">https://github.com/settings/tokens/new</a>
-                and authenticate. Then select the "repo" scope, and, optionally, change the expiration date. 
-                Finally, click "Generate token". Copy the token from the next screen, and paste it here.
-              </p>
-            </div>
-          </div>
-
-          <div id="output">${content}</div>
-        </main>
-      </div>
-    `;
-    }
-
-    function render(content = "", loading = false): void {
-        root.innerHTML = getHtml(
-            loading
-                ? `
-      <div class="loading">
-        <div class="loading-spinner"></div>
-        <span>Fetching review comments…</span>
-      </div>
-    `
-                : content,
-        );
-
-        // Restore input value after re-render
-        const input = root.querySelector<HTMLInputElement>("#pr-url");
-        const urlParam = new URLSearchParams(location.search).get("url");
-        if (input && urlParam) input.value = urlParam;
-
-        setupHandlers();
-    }
-
-    function setupHandlers(): void {
-        const form = root.querySelector<HTMLFormElement>("#pr-form");
-        const tokenToggle =
-            root.querySelector<HTMLButtonElement>("#token-toggle");
-        const tokenPanel = root.querySelector<HTMLDivElement>("#token-panel");
-        const tokenSave = root.querySelector<HTMLButtonElement>("#token-save");
-        const tokenClear =
-            root.querySelector<HTMLButtonElement>("#token-clear");
-
-        tokenToggle?.addEventListener("click", () => {
-            tokenPanel?.classList.toggle("hidden");
-        });
-
-        tokenSave?.addEventListener("click", () => {
-            const val =
-                root.querySelector<HTMLInputElement>("#token-input")?.value ??
-                "";
-            token = val;
-            localStorage.setItem("gh_token", val);
-            tokenPanel?.classList.add("hidden");
-            render();
-        });
-
-        tokenClear?.addEventListener("click", () => {
-            token = "";
-            localStorage.removeItem("gh_token");
-            const ti = root.querySelector<HTMLInputElement>("#token-input");
-            if (ti) ti.value = "";
-        });
-
-        form?.addEventListener("submit", async (e) => {
-            e.preventDefault();
-            const url =
-                root.querySelector<HTMLInputElement>("#pr-url")?.value ?? "";
-            const parsed = parsePRUrl(url);
-            if (!parsed) {
-                root.querySelector("#output")!.innerHTML = `
-          <div class="error">
-            <strong>Invalid URL.</strong> Please enter a GitHub pull request URL like:<br/>
-            <code>https://github.com/owner/repo/pull/123</code>
-          </div>
-        `;
-                return;
-            }
-
-            history.replaceState(null, "", `?url=${encodeURIComponent(url)}`);
-            render("", true);
-            // Re-populate input after loading re-render
-            const input = root.querySelector<HTMLInputElement>("#pr-url");
-            if (input) input.value = url;
-
-            try {
-                const data = await fetchPRData(parsed, token || undefined);
-                root.querySelector("#output")!.innerHTML = renderResults(data);
-                addFilterChangeHooks(data);
-            } catch (err) {
-                root.querySelector("#output")!.innerHTML = `
-          <div class="error">
-            <strong>Error:</strong> ${escapeHtml(err instanceof Error ? err.message : String(err))}
-          </div>
-        `;
-            }
-        });
-    }
-
-    // Check for URL param on load
-    const urlParam = new URLSearchParams(location.search).get("url");
-    render();
-    if (urlParam) {
-        const input = root.querySelector<HTMLInputElement>("#pr-url");
-        if (input) {
-            input.value = urlParam;
-            input.closest("form")?.dispatchEvent(new Event("submit"));
-        }
-    }
+/** Get the current token from local storage */
+function getToken(): string | null {
+    return localStorage.getItem("gh_token");
 }
