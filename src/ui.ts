@@ -298,6 +298,10 @@ function renderDiffHunk(
             rightLineNum += 1;
         }
 
+        // suppress eslint warning
+        // eslint-disable-next-line no-self-assign
+        leftLineNum = leftLineNum;
+
         const formattedLine = `<div class="${cls}">${escapeHtml(line)}</div>`;
 
         if (rightLineNum < startLine) {
