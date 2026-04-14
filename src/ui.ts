@@ -443,6 +443,11 @@ export function renderApp(root: HTMLElement): void {
                 <button id="token-save" class="token-save-btn">Save</button>
                 <button id="token-clear" class="token-clear-btn">Clear</button>
               </div>
+              <p>
+                To create a token, go to <a href="https://github.com/settings/tokens/new" target="_">https://github.com/settings/tokens/new</a>
+                and authenticate. Then select the "repo" scope, and, optionally, change the expiration date. 
+                Finally, click "Generate token". Copy the token from the next screen, and paste it here.
+              </p>
             </div>
           </div>
 

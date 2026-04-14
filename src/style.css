@@ -222,12 +222,16 @@ button.secondary:hover {
 }
 
 /* ── Token Panel ───────────────────────────────────────────────────────────── */
+
 .token-panel {
     margin-top: 12px;
-    padding: 16px;
+    padding: 16px 16px 8px;
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--text-muted);
 }
 
 .token-panel.hidden {
@@ -237,7 +241,6 @@ button.secondary:hover {
 .token-label {
     display: block;
     margin-bottom: 8px;
-    font-family: var(--mono);
 }
 
 .token-hint {
