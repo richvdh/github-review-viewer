@@ -232,7 +232,7 @@ function updateThreadsList(
 
 function renderThread(thread: CommentThread) {
     if (thread.comments.length < 1) return "";
-    let token = localStorage.getItem("gh_token") ?? "";
+    const token = localStorage.getItem("gh_token");
 
     const firstComment = thread.comments[0];
     const replies = thread.comments.slice(1);
