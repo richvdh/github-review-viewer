@@ -129,8 +129,14 @@ export interface CommentThread {
 
     resolved_by: GitHubUser | null;
 
+    /** Whether the user can reply to this thread. */
+    canReply: boolean;
+
     /** Whether the user can resolve this thread. */
     canResolve: boolean;
+
+    /** Whether the user can unresolve this thread. */
+    canUnresolve: boolean;
 }
 
 export async function fetchPRData(
@@ -240,7 +246,9 @@ async function getCommentThreads(
                   path
                   resolvedBy { login avatarUrl url }
                   startDiffSide
+                  viewerCanReply
                   viewerCanResolve
+                  viewerCanUnresolve
                 }
               }
             }
@@ -270,7 +278,9 @@ async function getCommentThreads(
                     (respThread.resolvedBy &&
                         actorToGithubUser(respThread.resolvedBy)) ??
                     null,
+                canReply: respThread.viewerCanReply,
                 canResolve: respThread.viewerCanResolve,
+                canUnresolve: respThread.viewerCanUnresolve,
             };
             result.push(thread);
 
@@ -322,5 +332,36 @@ export async function resolveReviewThread(
             resolveReviewThread(input: {threadId: $threadId}) { clientMutationId }
         }`,
         { threadId },
+    );
+}
+
+/** Mark the given review thread as unresolved. */
+export async function unresolveReviewThread(
+    threadId: string,
+    token: string,
+): Promise<void> {
+    const octokit = new Octokit({ auth: token });
+    return await octokit.graphql(
+        `mutation UnresolveReviewThread($threadId: ID!) {
+            unresolveReviewThread(input: {threadId: $threadId}) { clientMutationId }
+        }`,
+        { threadId },
+    );
+}
+
+export async function replyToReviewThread(
+    threadId: string,
+    commentBody: string,
+    token: string,
+): Promise<void> {
+    const octokit = new Octokit({ auth: token });
+    return await octokit.graphql(
+        `
+        mutation ReplyToCommentThread($threadId: ID!, $body: String!) {) {
+          addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) { 
+            clientMutationId
+          }
+        }`,
+        { threadId, body: commentBody },
     );
 }

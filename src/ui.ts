@@ -7,6 +7,7 @@ import {
     resolveReviewThread,
     type Review,
     type ReviewComment,
+    unresolveReviewThread,
 } from "./github";
 import { ThreadFilters } from "./threadFilters.ts";
 
@@ -117,12 +118,14 @@ function setupHandlers(root: HTMLElement): void {
         if (ti) ti.value = "";
     });
 
-    form?.addEventListener("submit", async (e) => {
+    form?.addEventListener("submit", (e) => {
         e.preventDefault();
         const url =
             root.querySelector<HTMLInputElement>("#pr-url")?.value ?? "";
         loadPullRequest(root, url);
     });
+
+    root.addEventListener("click", onClick);
 }
 
 async function loadPullRequest(root: HTMLElement, prURL: string) {
@@ -316,29 +319,6 @@ function addFilterChangeHooks(data: PRData): void {
         e.preventDefault();
         callback();
     };
-
-    const token = localStorage.getItem("gh_token");
-    if (!token) return;
-
-    const resolveThreadHandler = async (e: PointerEvent) => {
-        const btn = e.target! as HTMLButtonElement;
-        const threadId = btn.dataset.threadId;
-        if (!threadId) return;
-
-        btn.disabled = true;
-        try {
-            await resolveReviewThread(threadId, token);
-        } catch (e) {
-            btn.disabled = false;
-            alert(e);
-        }
-    };
-
-    for (const btn of document.querySelectorAll<HTMLButtonElement>(
-        ".resolve-btn",
-    )) {
-        btn.addEventListener("click", resolveThreadHandler);
-    }
 }
 
 /**
@@ -403,11 +383,30 @@ function renderThread(thread: CommentThread) {
 
     const linerange = `:${thread.startLine ? thread.startLine + "-" : ""}${thread.endLine}`;
 
-    const buttons = [
-        thread.canResolve
-            ? `<button type="submit" class="resolve-btn" data-thread-id="${thread.id}">Resolve</button>`
-            : "",
-    ];
+    const buttons: string[] = [];
+
+    if (thread.canResolve) {
+        buttons.push(
+            `<button type="submit" class="resolve-btn" data-action="resolve" data-thread-id="${thread.id}">Resolve</button>`,
+        );
+    }
+
+    if (thread.canUnresolve) {
+        buttons.push(
+            `<button type="submit" class="resolve-btn" data-action="unresolve" data-thread-id="${thread.id}">Unresolve</button>`,
+        );
+    }
+
+    /*    if (thread.canReply) {
+        buttons.push(
+            `<div class="thread-reply">
+                <form class="thread-reply-form" data-thread-id="${thread.id}">
+                    <textarea name="reply"></textarea>
+                    <input type="submit" value="Submit"/>
+                </form>
+            </div>`,
+        );
+    }*/
 
     const html = `
       <div class="thread">
@@ -549,6 +548,32 @@ function renderReviewBadge(state: Review["state"]): string {
     };
     const { label, cls } = map[state] ?? { label: state, cls: "" };
     return `<span class="badge ${cls}">${label}</span>`;
+}
+
+async function onClick(e: PointerEvent): Promise<void> {
+    const token = localStorage.getItem("gh_token");
+    if (!token) return;
+
+    const target = e.target as HTMLElement;
+
+    if (target.classList.contains("resolve-btn")) {
+        const btn = target as HTMLButtonElement;
+        const threadId = btn.dataset.threadId;
+        if (!threadId) return;
+        const action = btn.dataset.action;
+
+        btn.disabled = true;
+        try {
+            if (action === "resolve") {
+                await resolveReviewThread(threadId, token);
+            } else if (action === "unresolve") {
+                await unresolveReviewThread(threadId, token);
+            }
+        } catch (e) {
+            btn.disabled = false;
+            alert(e);
+        }
+    }
 }
 
 /** Get the current token from local storage */
