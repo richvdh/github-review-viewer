@@ -4,6 +4,7 @@ import {
     GitHubUser,
     parsePRUrl,
     type PRData,
+    replyToReviewThread,
     resolveReviewThread,
     type Review,
     type ReviewComment,
@@ -125,7 +126,8 @@ function setupHandlers(root: HTMLElement): void {
         loadPullRequest(root, url);
     });
 
-    root.addEventListener("click", onClick);
+    root.onclick = onClick;
+    root.onsubmit = onSubmit;
 }
 
 async function loadPullRequest(root: HTMLElement, prURL: string) {
@@ -357,7 +359,7 @@ function updateThreadsList(
     ).checked;
 
     const filtered = filter.apply(threads);
-    const html = filtered.map(renderThread).join("");
+    const html = filtered.map((t) => renderThread(t)).join("");
     document.getElementById("threads-list")!.innerHTML = html;
     document.getElementById("thread-comments-count")!.innerText = String(
         filtered.length,
@@ -366,13 +368,22 @@ function updateThreadsList(
     // TODO: add to query string
 }
 
-function renderThread(thread: CommentThread) {
+/** Get a complete thread div, including the outer */
+function renderThread(t: CommentThread): string {
+    return `
+        <div class="thread" id="thread-${escapeHtml(t.id)}">
+            ${renderThreadInner(t)}
+        </div>
+    `;
+}
+
+/** Get the inner HTML for a `thread` div */
+function renderThreadInner(thread: CommentThread): string {
     if (thread.comments.length < 1) return "";
 
     const firstComment = thread.comments[0];
     const replies = thread.comments.slice(1);
     const repliesHtml = replies.map((r) => renderComment(r, true)).join("");
-    const hasReplies = replies.length > 0;
 
     const resolvedBy = thread.resolved_by
         ? `<div class="thread-resolved">
@@ -382,6 +393,17 @@ function renderThread(thread: CommentThread) {
         : "";
 
     const linerange = `:${thread.startLine ? thread.startLine + "-" : ""}${thread.endLine}`;
+
+    const replyControl = thread.canReply
+        ? `<div class="thread-buttons">
+            <form class="thread-reply-form" data-thread-id="${thread.id}">
+                <div class="thread-reply-form-container">
+                    <textarea name="reply" placeholder="Reply..." cols="80" rows="3"></textarea>
+                    <input name="submit" type="submit" value="Submit"/>
+                </div>
+            </form>
+        </div>`
+        : "";
 
     const buttons: string[] = [];
 
@@ -397,19 +419,7 @@ function renderThread(thread: CommentThread) {
         );
     }
 
-    /*    if (thread.canReply) {
-        buttons.push(
-            `<div class="thread-reply">
-                <form class="thread-reply-form" data-thread-id="${thread.id}">
-                    <textarea name="reply"></textarea>
-                    <input type="submit" value="Submit"/>
-                </form>
-            </div>`,
-        );
-    }*/
-
     const html = `
-      <div class="thread">
           <div class="thread-header">
             <span>${escapeHtml(thread.path)}${linerange} ${firstComment.commitSHA}</span>
             ${resolvedBy}
@@ -417,11 +427,11 @@ function renderThread(thread: CommentThread) {
           ${renderDiffHunk(firstComment.diff_hunk, thread.startLine, thread.endLine)}
           <div class="thread-comments">
             ${renderComment(firstComment)}
-            ${hasReplies ? `<div class="thread-replies">${repliesHtml}</div>` : ""}
+            <div class="thread-replies">${repliesHtml}</div>
           </div>
+          ${replyControl}
           ${buttons.length > 0 ? `<div class="thread-buttons">${buttons.join("")}</div>` : ""}
         </div>
-      </div>
     `;
     return html;
 }
@@ -550,8 +560,9 @@ function renderReviewBadge(state: Review["state"]): string {
     return `<span class="badge ${cls}">${label}</span>`;
 }
 
+/** Root-level `click` handler. Handles the resolve/unresolve buttons */
 async function onClick(e: PointerEvent): Promise<void> {
-    const token = localStorage.getItem("gh_token");
+    const token = getToken();
     if (!token) return;
 
     const target = e.target as HTMLElement;
@@ -574,6 +585,57 @@ async function onClick(e: PointerEvent): Promise<void> {
             alert(e);
         }
     }
+}
+
+/** root-level onsubmit handler. Handles reply forms */
+async function onSubmit(e: SubmitEvent): Promise<void> {
+    const target = e.target as HTMLFormElement;
+    if (target.classList.contains("thread-reply-form")) {
+        e.preventDefault();
+        const token = getToken();
+        if (!token) return;
+
+        const threadId = target.dataset.threadId!;
+
+        const bodyElement = target.elements.namedItem(
+            "reply",
+        ) as HTMLTextAreaElement;
+        const body = bodyElement?.value;
+        if (!body) return;
+
+        const submitControl = target.elements.namedItem(
+            "submit",
+        ) as HTMLInputElement;
+        submitControl.disabled = true;
+
+        try {
+            const comment = await replyToReviewThread(threadId, body, token);
+            addCommentToThread(threadId, comment);
+            bodyElement.value = "";
+        } catch (e) {
+            alert(e);
+        } finally {
+            submitControl.disabled = false;
+        }
+    }
+}
+
+/** Add a comment to the existing div for a given thread */
+function addCommentToThread(threadId: string, comment: ReviewComment): void {
+    const threadEl = document.getElementById(`thread-${escapeHtml(threadId)}`);
+    if (!threadEl) {
+        console.warn(`Unable to find thread ${threadId}`);
+        return;
+    }
+
+    const repliesEl = threadEl.getElementsByClassName("thread-replies")[0];
+    repliesEl.append(...htmlToNode(renderComment(comment, true)));
+}
+
+function htmlToNode(html: string): NodeListOf<ChildNode> {
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    return template.content.childNodes;
 }
 
 /** Get the current token from local storage */

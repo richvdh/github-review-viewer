@@ -3,7 +3,13 @@ import {
     paginateGraphQL,
     paginateGraphQLInterface,
 } from "@octokit/plugin-paginate-graphql";
-import type { Actor, DiffSide, Repository } from "@octokit/graphql-schema";
+import type {
+    Actor,
+    DiffSide,
+    PullRequestReviewComment,
+    PullRequestReviewThread,
+    Repository,
+} from "@octokit/graphql-schema";
 
 export interface GitHubUser {
     login: string;
@@ -229,26 +235,7 @@ async function getCommentThreads(
                   endCursor
                 }
                 nodes {
-                  comments(first:100) {
-                    nodes {
-                      author { login avatarUrl url }
-                      bodyHTML
-                      createdAt
-                      diffHunk
-                      originalCommit { abbreviatedOid }
-                      url
-                    }
-                  }
-                  diffSide
-                  id
-                  originalLine
-                  originalStartLine
-                  path
-                  resolvedBy { login avatarUrl url }
-                  startDiffSide
-                  viewerCanReply
-                  viewerCanResolve
-                  viewerCanUnresolve
+                  ${reviewThreadRequestContent}
                 }
               }
             }
@@ -265,37 +252,7 @@ async function getCommentThreads(
     const result: CommentThread[] = [];
     for await (const resp of threadIterator) {
         for (const t of resp.repository.pullRequest!.reviewThreads.nodes!) {
-            const respThread = t!;
-            const thread: CommentThread = {
-                id: respThread.id,
-                comments: [],
-                path: respThread.path,
-                startLine: respThread.originalStartLine ?? null,
-                startDiffSide: respThread.startDiffSide ?? null,
-                endLine: respThread.originalLine!,
-                endDiffSide: respThread.diffSide!,
-                resolved_by:
-                    (respThread.resolvedBy &&
-                        actorToGithubUser(respThread.resolvedBy)) ??
-                    null,
-                canReply: respThread.viewerCanReply,
-                canResolve: respThread.viewerCanResolve,
-                canUnresolve: respThread.viewerCanUnresolve,
-            };
-            result.push(thread);
-
-            for (const c of respThread.comments.nodes!) {
-                const respComment = c!;
-                const comment: ReviewComment = {
-                    commitSHA: respComment.originalCommit!.abbreviatedOid,
-                    bodyHTML: respComment.bodyHTML,
-                    created_at: new Date(respComment.createdAt),
-                    diff_hunk: respComment.diffHunk,
-                    html_url: respComment.url,
-                    user: actorToGithubUser(respComment.author!),
-                };
-                thread.comments.push(comment);
-            }
+            result.push(buildCommentThreadFromResponse(t!));
         }
     }
 
@@ -353,15 +310,93 @@ export async function replyToReviewThread(
     threadId: string,
     commentBody: string,
     token: string,
-): Promise<void> {
+): Promise<ReviewComment> {
     const octokit = new Octokit({ auth: token });
-    return await octokit.graphql(
+    const resp = await octokit.graphql<{
+        addPullRequestReviewThreadReply: { comment: PullRequestReviewComment };
+    }>(
         `
-        mutation ReplyToCommentThread($threadId: ID!, $body: String!) {) {
+        mutation ReplyToCommentThread($threadId: ID!, $body: String!) {
           addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) { 
-            clientMutationId
+            comment {
+                ${reviewCommentRequest}
+            }
           }
         }`,
         { threadId, body: commentBody },
     );
+    return buildReviewCommentFromResponse(
+        resp.addPullRequestReviewThreadReply.comment,
+    );
+}
+
+const reviewCommentRequest = `
+    author { login avatarUrl url }
+    bodyHTML
+    createdAt
+    diffHunk
+    originalCommit { abbreviatedOid }
+    url
+`;
+
+const reviewThreadRequestContent = `
+    comments(first:100) {
+      nodes {
+        ${reviewCommentRequest}
+      }
+    }
+    diffSide
+    id
+    originalLine
+    originalStartLine
+    path
+    resolvedBy { login avatarUrl url }
+    startDiffSide
+    viewerCanReply
+    viewerCanResolve
+    viewerCanUnresolve
+`;
+
+/** Turn the result of a comment thread query, requested via {@link reviewThreadRequestContent}, into a {@CommentThread} */
+function buildCommentThreadFromResponse(
+    respThread: PullRequestReviewThread,
+): CommentThread {
+    const thread: CommentThread = {
+        id: respThread.id,
+        comments: [],
+        path: respThread.path,
+        startLine: respThread.originalStartLine ?? null,
+        startDiffSide: respThread.startDiffSide ?? null,
+        endLine: respThread.originalLine!,
+        endDiffSide: respThread.diffSide!,
+        resolved_by:
+            (respThread.resolvedBy &&
+                actorToGithubUser(respThread.resolvedBy)) ??
+            null,
+        canReply: respThread.viewerCanReply,
+        canResolve: respThread.viewerCanResolve,
+        canUnresolve: respThread.viewerCanUnresolve,
+    };
+
+    for (const c of respThread.comments.nodes!) {
+        const respComment: PullRequestReviewComment = c!;
+        const comment: ReviewComment =
+            buildReviewCommentFromResponse(respComment);
+        thread.comments.push(comment);
+    }
+    return thread;
+}
+
+/** Turn the result of a review comment query, requested via {@link reviewCommentRequest}, into a {@link ReviewComment} */
+function buildReviewCommentFromResponse(
+    respComment: PullRequestReviewComment,
+): ReviewComment {
+    return {
+        commitSHA: respComment.originalCommit!.abbreviatedOid,
+        bodyHTML: respComment.bodyHTML,
+        created_at: new Date(respComment.createdAt),
+        diff_hunk: respComment.diffHunk,
+        html_url: respComment.url,
+        user: actorToGithubUser(respComment.author!),
+    };
 }
