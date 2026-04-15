@@ -357,7 +357,7 @@ export async function replyToReviewThread(
     const octokit = new Octokit({ auth: token });
     return await octokit.graphql(
         `
-        mutation ReplyToCommentThread($threadId: ID!, $body: String!) {) {
+        mutation ReplyToCommentThread($threadId: ID!, $body: String!) {
           addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $threadId, body: $body}) { 
             clientMutationId
           }

@@ -4,6 +4,7 @@ import {
     GitHubUser,
     parsePRUrl,
     type PRData,
+    replyToReviewThread,
     resolveReviewThread,
     type Review,
     type ReviewComment,
@@ -125,7 +126,8 @@ function setupHandlers(root: HTMLElement): void {
         loadPullRequest(root, url);
     });
 
-    root.addEventListener("click", onClick);
+    root.onclick = onClick;
+    root.onsubmit = onSubmit;
 }
 
 async function loadPullRequest(root: HTMLElement, prURL: string) {
@@ -383,6 +385,17 @@ function renderThread(thread: CommentThread) {
 
     const linerange = `:${thread.startLine ? thread.startLine + "-" : ""}${thread.endLine}`;
 
+    const replyControl = thread.canReply
+        ? `<div class="thread-buttons">
+            <form class="thread-reply-form" data-thread-id="${thread.id}">
+                <div class="thread-reply-form-container">
+                    <textarea name="reply" placeholder="Reply..." cols="80" rows="3"></textarea>
+                    <input name="submit" type="submit" value="Submit"/>
+                </div>
+            </form>
+        </div>`
+        : "";
+
     const buttons: string[] = [];
 
     if (thread.canResolve) {
@@ -397,17 +410,6 @@ function renderThread(thread: CommentThread) {
         );
     }
 
-    /*    if (thread.canReply) {
-        buttons.push(
-            `<div class="thread-reply">
-                <form class="thread-reply-form" data-thread-id="${thread.id}">
-                    <textarea name="reply"></textarea>
-                    <input type="submit" value="Submit"/>
-                </form>
-            </div>`,
-        );
-    }*/
-
     const html = `
       <div class="thread">
           <div class="thread-header">
@@ -419,6 +421,7 @@ function renderThread(thread: CommentThread) {
             ${renderComment(firstComment)}
             ${hasReplies ? `<div class="thread-replies">${repliesHtml}</div>` : ""}
           </div>
+          ${replyControl}
           ${buttons.length > 0 ? `<div class="thread-buttons">${buttons.join("")}</div>` : ""}
         </div>
       </div>
@@ -550,8 +553,9 @@ function renderReviewBadge(state: Review["state"]): string {
     return `<span class="badge ${cls}">${label}</span>`;
 }
 
+/** Root-level `click` handler. Handles the resolve/unresolve buttons */
 async function onClick(e: PointerEvent): Promise<void> {
-    const token = localStorage.getItem("gh_token");
+    const token = getToken();
     if (!token) return;
 
     const target = e.target as HTMLElement;
@@ -571,6 +575,34 @@ async function onClick(e: PointerEvent): Promise<void> {
             }
         } catch (e) {
             btn.disabled = false;
+            alert(e);
+        }
+    }
+}
+
+/** root-level onsubmit handler. Handles reply forms */
+async function onSubmit(e: SubmitEvent): Promise<void> {
+    const target = e.target as HTMLFormElement;
+    if (target.classList.contains("thread-reply-form")) {
+        e.preventDefault();
+        const token = getToken();
+        if (!token) return;
+
+        const threadId = target.dataset.threadId!;
+
+        const body = (target.elements.namedItem("reply") as HTMLTextAreaElement)
+            ?.value;
+        if (!body) return;
+
+        const submitControl = target.elements.namedItem(
+            "submit",
+        ) as HTMLInputElement;
+        submitControl.disabled = true;
+
+        try {
+            await replyToReviewThread(threadId, body, token);
+        } catch (e) {
+            submitControl.disabled = false;
             alert(e);
         }
     }
