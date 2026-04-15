@@ -24,6 +24,7 @@ export interface ReviewComment {
     html_url: string;
     diff_hunk: string;
     commitSHA: string;
+    isPending: boolean;
 }
 
 export interface Review {
@@ -336,6 +337,7 @@ const reviewCommentRequest = `
     createdAt
     diffHunk
     originalCommit { abbreviatedOid }
+    state
     url
 `;
 
@@ -398,5 +400,6 @@ function buildReviewCommentFromResponse(
         diff_hunk: respComment.diffHunk,
         html_url: respComment.url,
         user: actorToGithubUser(respComment.author!),
+        isPending: respComment.state === "PENDING",
     };
 }
