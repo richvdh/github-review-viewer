@@ -63,14 +63,16 @@ label {
     font-family: var(--mono);
 }
 
-input, textarea {
+input,
+textarea {
     background: var(--surface-2);
     font-size: 0.85rem;
     color: var(--text);
     outline: none;
 }
 
-input[type="text"], textarea {
+input[type="text"],
+textarea {
     padding: 4px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
@@ -599,7 +601,9 @@ button.token-clear-btn {
     padding-left: 16px;
     padding-bottom: 12px;
 
-    input, textarea, button {
+    input,
+    textarea,
+    button {
         margin: 4px;
     }
 }
