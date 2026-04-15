@@ -589,6 +589,10 @@ button.token-clear-btn {
     padding-bottom: 12px;
 }
 
+.thread-replies:empty {
+    display: none;
+}
+
 .thread-buttons {
     border-top: 1px solid var(--border-2);
     padding-top: 12px;
