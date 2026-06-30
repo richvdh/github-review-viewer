@@ -235,7 +235,7 @@ button.secondary:hover {
     color: var(--text-muted);
 }
 
-.token-panel.hidden {
+.token-panel:empty {
     display: none;
 }
 

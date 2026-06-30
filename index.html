@@ -88,43 +88,8 @@
                             </button>
                         </div>
                     </form>
-                    <div id="token-panel" class="token-panel hidden">
-                        <label class="token-label"
-                            >GitHub Personal Access Token
-                            <span class="token-hint"
-                                >(optional — needed to access private repos, to
-                                update reviews, or if rate limited)</span
-                            ></label
-                        >
-                        <div class="token-row">
-                            <input
-                                type="password"
-                                id="token-input"
-                                class="token-input"
-                                placeholder="ghp_..."
-                            />
-                            <button id="token-save" class="token-save-btn">
-                                Save
-                            </button>
-                            <button id="token-clear" class="token-clear-btn">
-                                Clear
-                            </button>
-                        </div>
-                        <p>
-                            To create a token, go to
-                            <a
-                                href="https://github.com/settings/tokens/new"
-                                target="_"
-                                >https://github.com/settings/tokens/new</a
-                            >
-                            and authenticate. Then select the "repo" scope, and,
-                            optionally, change the expiration date. Finally,
-                            click "Generate token". Copy the token from the next
-                            screen, and paste it here.
-                        </p>
-                    </div>
+                    <div id="token-panel" class="token-panel"></div>
                 </div>
-
                 <div id="output"></div>
             </main>
         </div>
