@@ -351,7 +351,6 @@ function renderThreadInner(thread: CommentThread): string {
           </div>
           ${replyControl}
           ${buttons.length > 0 ? `<div class="thread-buttons">${buttons.join("")}</div>` : ""}
-        </div>
     `;
     return html;
 }
