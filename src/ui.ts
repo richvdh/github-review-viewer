@@ -390,6 +390,8 @@ function renderDiffHunk(
 
     for (const line of lines) {
         let cls = "diff-line";
+        let formattedLine;
+
         if (line.startsWith("@@")) {
             // meta line
             const metaMatch = line.match(
@@ -404,22 +406,32 @@ function renderDiffHunk(
                 rightLineNum = parseInt(metaMatch[2]) - 1;
             }
             cls += " diff-meta";
-        } else if (line.startsWith("+")) {
-            cls += " diff-add";
-            rightLineNum += 1;
-        } else if (line.startsWith("-")) {
-            cls += " diff-remove";
-            leftLineNum += 1;
+            formattedLine = `<div class="${cls}">${escapeHtml(line)}</div>`;
         } else {
-            leftLineNum += 1;
-            rightLineNum += 1;
+            let showLeftLineNum = false,
+                showRightLineNum = false;
+
+            if (line.startsWith("+")) {
+                cls += " diff-add";
+                rightLineNum += 1;
+                showRightLineNum = true;
+            } else if (line.startsWith("-")) {
+                cls += " diff-remove";
+                leftLineNum += 1;
+                showLeftLineNum = true;
+            } else {
+                leftLineNum += 1;
+                rightLineNum += 1;
+                showLeftLineNum = showRightLineNum = true;
+            }
+
+            formattedLine =
+                `<div class="${cls}">` +
+                `<span class="diff-linenum">${showLeftLineNum ? leftLineNum : ""}</span>` +
+                `<span class="diff-linenum">${showRightLineNum ? rightLineNum : ""}</span>` +
+                escapeHtml(line) +
+                `</div>`;
         }
-
-        // suppress eslint warning
-        // eslint-disable-next-line no-self-assign
-        leftLineNum = leftLineNum;
-
-        const formattedLine = `<div class="${cls}">${escapeHtml(line)}</div>`;
 
         if (rightLineNum < startLine) {
             before.push(formattedLine);
