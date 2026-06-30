@@ -661,6 +661,14 @@ details[open] > .diff-summary::before {
     white-space: pre;
 }
 
+.diff-linenum {
+    width: 4em;
+    display: inline-block;
+    user-select: none;
+    text-align: end;
+    padding: 0 1em;
+}
+
 .blob-code-inner {
     white-space: pre;
 }
