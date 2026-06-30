@@ -14,7 +14,7 @@ import { ThreadFilters } from "./threadFilters.ts";
 
 /** Main entry point */
 export function renderApp(root: HTMLElement): void {
-    updateTokenElements(root);
+    updateTokenButton(root);
     setupHandlers(root);
 
     const urlParam = new URLSearchParams(location.search).get("url");
@@ -25,44 +25,19 @@ export function renderApp(root: HTMLElement): void {
     }
 }
 
-/** Populate the token elements after a change to the token */
-function updateTokenElements(root: HTMLElement): void {
+/** Populate the token button to show whether there is a token set or not */
+function updateTokenButton(root: HTMLElement): void {
     const token = getToken();
     const tokenButtonTextElement = root.querySelector("#token-button-text");
     tokenButtonTextElement!.innerHTML = token ? "🔑 Token set" : "Add token";
-
-    const tokenInputElement = root.querySelector(
-        "#token-input",
-    ) as HTMLInputElement;
-    tokenInputElement.value = token || "";
 }
 
 /** Add handlers to the static elements */
 function setupHandlers(root: HTMLElement): void {
     const form = root.querySelector<HTMLFormElement>("#pr-form");
     const tokenToggle = root.querySelector<HTMLButtonElement>("#token-toggle");
-    const tokenPanel = root.querySelector<HTMLDivElement>("#token-panel");
-    const tokenSave = root.querySelector<HTMLButtonElement>("#token-save");
-    const tokenClear = root.querySelector<HTMLButtonElement>("#token-clear");
 
-    tokenToggle!.onclick = () => {
-        tokenPanel?.classList.toggle("hidden");
-    };
-
-    tokenSave?.addEventListener("click", () => {
-        const val =
-            root.querySelector<HTMLInputElement>("#token-input")?.value ?? "";
-        localStorage.setItem("gh_token", val);
-        tokenPanel?.classList.add("hidden");
-        updateTokenElements(root);
-        setOutput("");
-    });
-
-    tokenClear!.onclick = () => {
-        localStorage.removeItem("gh_token");
-        const ti = root.querySelector<HTMLInputElement>("#token-input");
-        if (ti) ti.value = "";
-    };
+    tokenToggle!.onclick = () => showTokenPanel(root);
 
     form?.addEventListener("submit", (e) => {
         e.preventDefault();
@@ -505,6 +480,75 @@ function renderReviewBadge(state: Review["state"]): string {
     };
     const { label, cls } = map[state] ?? { label: state, cls: "" };
     return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function showTokenPanel(root: HTMLElement): void {
+    const token = getToken();
+    const tokenToggle = root.querySelector<HTMLButtonElement>("#token-toggle")!;
+    const tokenPanelEl = root.querySelector("#token-panel")!;
+
+    function hideTokenPanel(): void {
+        tokenPanelEl.innerHTML = "";
+        tokenToggle.onclick = () => showTokenPanel(root);
+    }
+
+    tokenPanelEl.innerHTML = `
+        <label class="token-label">GitHub Personal Access Token
+            <span class="token-hint">
+                (optional — needed to access private repos, to
+                update reviews, or if rate limited)
+            </span>
+        </label>
+        <div class="token-row">
+            <input
+                type="password"
+                id="token-input"
+                class="token-input"
+                placeholder="ghp_..."
+                value="${token ?? ""}"
+            />
+            <button id="token-save" class="token-save-btn">
+                Save
+            </button>
+            <button id="token-clear" class="token-clear-btn">
+                Clear
+            </button>
+        </div>
+        <p>
+            To create a token, go to
+            <a
+                href="https://github.com/settings/tokens/new"
+                target="_"
+                >https://github.com/settings/tokens/new
+            </a>
+            and authenticate. Then select the "repo" scope, and,
+            optionally, change the expiration date. Finally,
+            click "Generate token". Copy the token from the next
+            screen, and paste it here.
+        </p>
+    `;
+
+    const tokenInput =
+        tokenPanelEl.querySelector<HTMLInputElement>("#token-input");
+    const tokenSave =
+        tokenPanelEl.querySelector<HTMLButtonElement>("#token-save");
+    const tokenClear =
+        tokenPanelEl.querySelector<HTMLButtonElement>("#token-clear");
+
+    tokenSave!.onclick = () => {
+        const val = tokenInput!.value ?? "";
+        localStorage.setItem("gh_token", val);
+        updateTokenButton(root);
+        hideTokenPanel();
+        setOutput("");
+    };
+
+    tokenClear!.onclick = () => {
+        localStorage.removeItem("gh_token");
+        tokenInput!.value = "";
+    };
+
+    tokenToggle.onclick = () => hideTokenPanel();
 }
 
 /** Root-level `click` handler. Handles the resolve/unresolve buttons */
