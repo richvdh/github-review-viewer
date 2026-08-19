@@ -49,7 +49,6 @@ function setupHandlers(root: HTMLElement): void {
         loadPullRequest(root, url);
     });
 
-    root.onclick = onClick;
     root.onsubmit = onSubmit;
 }
 
@@ -82,6 +81,7 @@ async function loadPullRequest(root: HTMLElement, prURL: string) {
         const data = await fetchPRData(parsed, getToken() || undefined);
         setOutput(renderResults(data));
         addFilterChangeHooks(data);
+        root.onclick = (e) => onClick(e as PointerEvent, data);
     } catch (err) {
         console.error(err);
         setOutput(`
@@ -716,7 +716,7 @@ function showTokenPanel(root: HTMLElement): void {
 }
 
 /** Root-level `click` handler. Handles the resolve/unresolve buttons, and the reaction buttons */
-async function onClick(e: PointerEvent): Promise<void> {
+async function onClick(e: PointerEvent, data: PRData): Promise<void> {
     const token = getToken();
     if (!token) return;
 
@@ -725,7 +725,7 @@ async function onClick(e: PointerEvent): Promise<void> {
     if (target.classList.contains("resolve-btn")) {
         await onResolveButtonClick(target, token);
     } else if (target.classList.contains("reaction-btn")) {
-        await onReactionButtonClick(target, token);
+        await onReactionButtonClick(target, token, data);
     }
 }
 
@@ -748,23 +748,38 @@ async function onResolveButtonClick(target: HTMLElement, token: string) {
     }
 }
 
-async function onReactionButtonClick(target: HTMLElement, token: string) {
+async function onReactionButtonClick(
+    target: HTMLElement,
+    token: string,
+    data: PRData,
+) {
     const btn = target as HTMLButtonElement;
+
+    // Find the right comment in the data.
     const commentId = btn.dataset.commentId;
+    const comment = data.threads
+        .flatMap((t) => t.comments)
+        .find((c) => c.id === commentId);
+    if (!comment) return;
 
     // Look the reaction up rather than casting, so a bad attribute can't
     // reach the API.
     const reaction = REACTIONS.find((r) => r.content === btn.dataset.reaction);
-    if (!commentId || !reaction) return;
+    if (!reaction) return;
 
     btn.disabled = true;
     try {
-        const reactions = await addReactionToComment(
-            commentId,
+        // Update the model with new reaction data.
+        comment.reactions = await addReactionToComment(
+            comment.id,
             reaction.content,
             token,
         );
-        updateCommentReactions(btn, reactions);
+
+        // re-render the reactions row
+        const row = btn.closest(".comment-reactions-row");
+        if (row)
+            row.outerHTML = renderCommentReactionsRow(comment, data.whoami);
     } catch (e) {
         btn.disabled = false;
         alert(e);
@@ -817,22 +832,6 @@ function addCommentToThread(threadId: string, comment: ReviewComment): void {
     // TODO: populate `whoami` properly. For now it's ok, because a newly-created
     //   comment has no reactions, so the viewer's login is moot.
     repliesEl.append(...htmlToNode(renderComment(comment, null, true)));
-}
-
-/**
- * Replace the reaction chips on the comment containing `el`, and close its
- * reaction picker.
- */
-function updateCommentReactions(
-    el: HTMLElement,
-    reactions: ReviewCommentReaction[],
-): void {
-    const comment = el.closest(".comment");
-    if (!comment) return;
-
-    comment.querySelector(".comment-reactions")!.outerHTML =
-        renderReactions(reactions);
-    comment.querySelector<HTMLDetailsElement>(".reaction-picker")!.open = false;
 }
 
 function htmlToNode(html: string): NodeListOf<ChildNode> {
