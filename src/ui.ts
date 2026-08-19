@@ -11,6 +11,7 @@ import {
     unresolveReviewThread,
     ReviewCommentReaction,
     REACTIONS,
+    addReactionToComment,
 } from "./github";
 import { ThreadFilters, ThreadSort } from "./threadFilters.ts";
 
@@ -691,7 +692,7 @@ function showTokenPanel(root: HTMLElement): void {
     tokenToggle.onclick = () => hideTokenPanel();
 }
 
-/** Root-level `click` handler. Handles the resolve/unresolve buttons */
+/** Root-level `click` handler. Handles the resolve/unresolve buttons, and the reaction buttons */
 async function onClick(e: PointerEvent): Promise<void> {
     const token = getToken();
     if (!token) return;
@@ -699,22 +700,51 @@ async function onClick(e: PointerEvent): Promise<void> {
     const target = e.target as HTMLElement;
 
     if (target.classList.contains("resolve-btn")) {
-        const btn = target as HTMLButtonElement;
-        const threadId = btn.dataset.threadId;
-        if (!threadId) return;
-        const action = btn.dataset.action;
+        await onResolveButtonClick(target, token);
+    } else if (target.classList.contains("reaction-btn")) {
+        await onReactionButtonClick(target, token);
+    }
+}
 
-        btn.disabled = true;
-        try {
-            if (action === "resolve") {
-                await resolveReviewThread(threadId, token);
-            } else if (action === "unresolve") {
-                await unresolveReviewThread(threadId, token);
-            }
-        } catch (e) {
-            btn.disabled = false;
-            alert(e);
+async function onResolveButtonClick(target: HTMLElement, token: string) {
+    const btn = target as HTMLButtonElement;
+    const threadId = btn.dataset.threadId;
+    if (!threadId) return;
+    const action = btn.dataset.action;
+
+    btn.disabled = true;
+    try {
+        if (action === "resolve") {
+            await resolveReviewThread(threadId, token);
+        } else if (action === "unresolve") {
+            await unresolveReviewThread(threadId, token);
         }
+    } catch (e) {
+        btn.disabled = false;
+        alert(e);
+    }
+}
+
+async function onReactionButtonClick(target: HTMLElement, token: string) {
+    const btn = target as HTMLButtonElement;
+    const commentId = btn.dataset.commentId;
+
+    // Look the reaction up rather than casting, so a bad attribute can't
+    // reach the API.
+    const reaction = REACTIONS.find((r) => r.content === btn.dataset.reaction);
+    if (!commentId || !reaction) return;
+
+    btn.disabled = true;
+    try {
+        const reactions = await addReactionToComment(
+            commentId,
+            reaction.content,
+            token,
+        );
+        updateCommentReactions(btn, reactions);
+    } catch (e) {
+        btn.disabled = false;
+        alert(e);
     }
 }
 
@@ -761,6 +791,22 @@ function addCommentToThread(threadId: string, comment: ReviewComment): void {
 
     const repliesEl = threadEl.getElementsByClassName("thread-replies")[0];
     repliesEl.append(...htmlToNode(renderComment(comment, true)));
+}
+
+/**
+ * Replace the reaction chips on the comment containing `el`, and close its
+ * reaction picker.
+ */
+function updateCommentReactions(
+    el: HTMLElement,
+    reactions: ReviewCommentReaction[],
+): void {
+    const comment = el.closest(".comment");
+    if (!comment) return;
+
+    comment.querySelector(".comment-reactions")!.outerHTML =
+        renderReactions(reactions);
+    comment.querySelector<HTMLDetailsElement>(".reaction-picker")!.open = false;
 }
 
 function htmlToNode(html: string): NodeListOf<ChildNode> {

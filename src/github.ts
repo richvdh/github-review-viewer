@@ -8,9 +8,9 @@ import type {
     DiffSide,
     PullRequestReviewComment,
     PullRequestReviewThread,
-    Reaction,
     ReactionContent,
     Repository,
+    ReactionConnection,
 } from "@octokit/graphql-schema";
 
 export interface GitHubUser {
@@ -345,6 +345,42 @@ export async function replyToReviewThread(
     );
 }
 
+/**
+ * Add the given reaction to a review comment.
+ *
+ * Returns the comment's complete updated list of reactions.
+ */
+export async function addReactionToComment(
+    commentId: string,
+    content: ReactionContent,
+    token: string,
+): Promise<ReviewCommentReaction[]> {
+    const octokit = new Octokit({ auth: token });
+    const resp = await octokit.graphql<{
+        addReaction: { subject: { reactions: ReactionConnection } };
+    }>(
+        `mutation AddReaction($commentId: ID!, $content: ReactionContent!) {
+          addReaction(input: {subjectId: $commentId, content: $content}) {
+            subject {
+               reactions(first:100) {
+                  nodes {
+                    ${reactionsRequest}
+                  }
+               }
+            }
+          }
+        }`,
+        { commentId, content },
+    );
+
+    return buildReactionListFromConnection(resp.addReaction.subject.reactions);
+}
+
+const reactionsRequest = `
+    content
+    user { login avatarUrl url }
+`;
+
 const reviewCommentRequest = `
     author { login avatarUrl url }
     bodyHTML
@@ -354,8 +390,7 @@ const reviewCommentRequest = `
     originalCommit { abbreviatedOid }
     reactions(first:40) {
       nodes {
-        content
-        user { login avatarUrl url }
+        ${reactionsRequest}
       }
     }
     state
@@ -415,11 +450,6 @@ function buildCommentThreadFromResponse(
 function buildReviewCommentFromResponse(
     respComment: PullRequestReviewComment,
 ): ReviewComment {
-    const buildReviewReactionFromResponse = (reaction: Reaction) => ({
-        emoji: reactionToEmoji(reaction.content),
-        user: actorToGithubUser(reaction.user!),
-    });
-
     return {
         id: respComment.id,
         commitSHA: respComment.originalCommit!.abbreviatedOid,
@@ -429,11 +459,21 @@ function buildReviewCommentFromResponse(
         html_url: respComment.url,
         user: actorToGithubUser(respComment.author!),
         isPending: respComment.state === "PENDING",
-        reactions: respComment.reactions
-            .nodes!.filter((v) => !!v)
-            .map(buildReviewReactionFromResponse),
+        reactions: buildReactionListFromConnection(respComment.reactions),
         viewerCanReact: respComment.viewerCanReact,
     };
+}
+
+/** Turn the result of a review reaction query, requested via {@link reactionsRequest}, into a {@link ReviewCommentReaction} */
+function buildReactionListFromConnection(
+    reactions: ReactionConnection,
+): ReviewCommentReaction[] {
+    return reactions
+        .nodes!.filter((v) => !!v)
+        .map((reaction) => ({
+            emoji: reactionToEmoji(reaction.content),
+            user: actorToGithubUser(reaction.user!),
+        }));
 }
 
 /** The reactions GitHub supports, in the order its own picker lists them. */
