@@ -884,6 +884,10 @@ button.reaction-chip:disabled {
     opacity: 0.5;
 }
 
+button.reaction-chip[aria-pressed="true"] {
+    border-color: var(--accent);
+}
+
 /* ── Github User ────────────────────────────────────────────────────────────── */
 
 .github-user {

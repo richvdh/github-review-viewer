@@ -12,6 +12,7 @@ import {
     ReviewCommentReaction,
     REACTIONS,
     addReactionToComment,
+    removeReactionFromComment,
 } from "./github";
 import { ThreadFilters, ThreadSort } from "./threadFilters.ts";
 
@@ -616,9 +617,9 @@ function renderReactionPicker(
         const reacted = myReactions.has(r.emoji);
         return `
             <button type="button" class="reaction-chip reaction-btn" title="${r.label}"
+                aria-pressed="${reacted}"
                 data-comment-id="${escapeHtml(comment.id)}"
                 data-reaction="${r.content}"
-                ${reacted ? "disabled" : ""}
             >${r.emoji}</button>`;
     }).join("");
 
@@ -767,14 +768,16 @@ async function onReactionButtonClick(
     const reaction = REACTIONS.find((r) => r.content === btn.dataset.reaction);
     if (!reaction) return;
 
+    // Figure out if we're reacting or unreacting.
+    const alreadyReacted = btn.getAttribute("aria-pressed") === "true";
+    const mutate = alreadyReacted
+        ? removeReactionFromComment
+        : addReactionToComment;
+
     btn.disabled = true;
     try {
         // Update the model with new reaction data.
-        comment.reactions = await addReactionToComment(
-            comment.id,
-            reaction.content,
-            token,
-        );
+        comment.reactions = await mutate(comment.id, reaction.content, token);
 
         // re-render the reactions row
         const row = btn.closest(".comment-reactions-row");

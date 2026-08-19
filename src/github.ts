@@ -11,6 +11,8 @@ import type {
     ReactionContent,
     Repository,
     ReactionConnection,
+    AddReactionPayload,
+    RemoveReactionPayload,
 } from "@octokit/graphql-schema";
 
 export interface GitHubUser {
@@ -283,7 +285,7 @@ async function getViewerLogin(octokit: Octokit): Promise<string> {
 }
 
 /** Convert a GraphQL {@link https://docs.github.com/en/graphql/reference/interfaces#actor|Actor} into a
- * {@link GithubUser}.
+ * {@link GitHubUser}.
  */
 function actorToGithubUser(actor: Actor): GitHubUser {
     return {
@@ -357,7 +359,7 @@ export async function addReactionToComment(
 ): Promise<ReviewCommentReaction[]> {
     const octokit = new Octokit({ auth: token });
     const resp = await octokit.graphql<{
-        addReaction: { subject: { reactions: ReactionConnection } };
+        addReaction: AddReactionPayload;
     }>(
         `mutation AddReaction($commentId: ID!, $content: ReactionContent!) {
           addReaction(input: {subjectId: $commentId, content: $content}) {
@@ -373,7 +375,40 @@ export async function addReactionToComment(
         { commentId, content },
     );
 
-    return buildReactionListFromConnection(resp.addReaction.subject.reactions);
+    return buildReactionListFromConnection(resp.addReaction.subject!.reactions);
+}
+
+/**
+ * Remove the viewer's reaction from a review comment.
+ *
+ * Returns the comment's complete updated list of reactions.
+ */
+export async function removeReactionFromComment(
+    commentId: string,
+    content: ReactionContent,
+    token: string,
+): Promise<ReviewCommentReaction[]> {
+    const octokit = new Octokit({ auth: token });
+    const resp = await octokit.graphql<{
+        removeReaction: RemoveReactionPayload;
+    }>(
+        `mutation RemoveReaction($commentId: ID!, $content: ReactionContent!) {
+          removeReaction(input: {subjectId: $commentId, content: $content}) {
+            subject {
+               reactions(first:100) {
+                  nodes {
+                    ${reactionsRequest}
+                  }
+               }
+             }
+          }
+        }`,
+        { commentId, content },
+    );
+
+    return buildReactionListFromConnection(
+        resp.removeReaction.subject!.reactions,
+    );
 }
 
 const reactionsRequest = `
