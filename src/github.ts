@@ -20,6 +20,9 @@ export interface GitHubUser {
 }
 
 export interface ReviewComment {
+    /** The Node ID of the PullRequestReviewComment. */
+    id: string;
+
     user: GitHubUser;
     bodyHTML: string;
     created_at: Date;
@@ -28,6 +31,9 @@ export interface ReviewComment {
     commitSHA: string;
     isPending: boolean;
     reactions: ReviewCommentReaction[];
+
+    /** Whether the viewer is allowed to react to this comment. */
+    viewerCanReact: boolean;
 }
 
 export interface ReviewCommentReaction {
@@ -344,6 +350,7 @@ const reviewCommentRequest = `
     bodyHTML
     createdAt
     diffHunk
+    id
     originalCommit { abbreviatedOid }
     reactions(first:40) {
       nodes {
@@ -353,6 +360,7 @@ const reviewCommentRequest = `
     }
     state
     url
+    viewerCanReact
 `;
 
 const reviewThreadRequestContent = `
@@ -413,6 +421,7 @@ function buildReviewCommentFromResponse(
     });
 
     return {
+        id: respComment.id,
         commitSHA: respComment.originalCommit!.abbreviatedOid,
         bodyHTML: respComment.bodyHTML,
         created_at: new Date(respComment.createdAt),
@@ -423,28 +432,31 @@ function buildReviewCommentFromResponse(
         reactions: respComment.reactions
             .nodes!.filter((v) => !!v)
             .map(buildReviewReactionFromResponse),
+        viewerCanReact: respComment.viewerCanReact,
     };
 }
 
+/** The reactions GitHub supports, in the order its own picker lists them. */
+export const REACTIONS: {
+    content: ReactionContent;
+    emoji: string;
+    label: string;
+}[] = [
+    { content: "THUMBS_UP", emoji: "👍", label: "+1" },
+    { content: "THUMBS_DOWN", emoji: "👎", label: "-1" },
+    { content: "LAUGH", emoji: "😄", label: "Laugh" },
+    { content: "HOORAY", emoji: "🎉", label: "Hooray" },
+    { content: "CONFUSED", emoji: "😕", label: "Confused" },
+    { content: "HEART", emoji: "❤️", label: "Heart" },
+    { content: "ROCKET", emoji: "🚀", label: "Rocket" },
+    { content: "EYES", emoji: "👀", label: "Eyes" },
+];
+
 function reactionToEmoji(reaction: ReactionContent): string {
-    switch (reaction) {
-        case "CONFUSED":
-            return "😕";
-        case "EYES":
-            return "👀";
-        case "HEART":
-            return "❤️";
-        case "HOORAY":
-            return "🎉";
-        case "LAUGH":
-            return "😀";
-        case "ROCKET":
-            return "🚀";
-        case "THUMBS_DOWN":
-            return "👎";
-        case "THUMBS_UP":
-            return "👍";
-        default:
-            return reaction;
+    const r = REACTIONS.find((r) => r.content === reaction);
+    if (r) {
+        return r.emoji;
+    } else {
+        return reaction;
     }
 }

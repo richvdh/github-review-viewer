@@ -109,6 +109,7 @@ input[type="submit"]:hover {
 button:disabled,
 input[type="submit"]:disabled {
     background: var(--disabled-button);
+    cursor: default;
 }
 
 button.secondary {
@@ -799,14 +800,27 @@ details[open] > .diff-summary::before {
     border-left: 2px solid var(--border);
 }
 
-.comment-reactions {
+/* ── Reactions ─────────────────────────────────────────────────────────────── */
+
+.comment-reactions-row {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 6px;
     margin-top: 8px;
 }
 
-.reaction {
+.comment-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.comment-reactions:empty {
+    display: none;
+}
+
+.reaction-chip {
     display: inline-flex;
     align-items: center;
     gap: 5px;
@@ -827,6 +841,47 @@ details[open] > .diff-summary::before {
 .reaction-avatar {
     display: block;
     border-radius: 50%;
+}
+
+.reaction-picker {
+    display: flex;
+    align-items: center;
+}
+
+.reaction-picker-summary {
+    /* Sizing comes from .reaction, which the summary also carries. */
+
+    color: var(--text-muted);
+    cursor: pointer;
+
+    /* Suppress the default disclosure triangle. */
+    list-style: none;
+
+    &::-webkit-details-marker {
+        display: none;
+    }
+
+    &:hover {
+        color: var(--text);
+        border-color: var(--accent-dim);
+    }
+}
+
+.reaction-picker-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-left: 6px;
+}
+
+/* Browsers hide closed <details> content for us, but Chrome still generates a
+   box for it — which would leave the margin above dangling when closed. */
+.reaction-picker:not([open]) .reaction-picker-buttons {
+    display: none;
+}
+
+button.reaction-chip:disabled {
+    opacity: 0.5;
 }
 
 /* ── Github User ────────────────────────────────────────────────────────────── */

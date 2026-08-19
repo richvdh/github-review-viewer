@@ -10,6 +10,7 @@ import {
     type ReviewComment,
     unresolveReviewThread,
     ReviewCommentReaction,
+    REACTIONS,
 } from "./github";
 import { ThreadFilters, ThreadSort } from "./threadFilters.ts";
 
@@ -533,7 +534,7 @@ function renderComment(comment: ReviewComment, isReply = false): string {
         </a>
       </div>
       <div class="comment-body">${comment.bodyHTML}</div>
-      ${renderReactions(comment.reactions)}
+      ${renderCommentReactionsRow(comment)}
     </div>
   `;
 }
@@ -546,10 +547,15 @@ function renderUser(user: GitHubUser): string {
         </a>`;
 }
 
+/** The row below a comment holding its reaction chips and the reaction picker. */
+function renderCommentReactionsRow(comment: ReviewComment): string {
+    const picker = renderReactionPicker(comment);
+    if (comment.reactions.length === 0 && !picker) return "";
+    return `<div class="comment-reactions-row">${renderReactions(comment.reactions)}${picker}</div>`;
+}
+
 /** Render a comment's reactions as a row of emoji + reactor-avatar chips. */
 function renderReactions(reactions: ReviewCommentReaction[]): string {
-    if (reactions.length === 0) return "";
-
     // Group by emoji, preserving first-seen order.
     const groups = new Map<string, GitHubUser[]>();
     for (const r of reactions) {
@@ -568,7 +574,7 @@ function renderReactions(reactions: ReviewCommentReaction[]): string {
                          </a>`,
                 )
                 .join("");
-            return `<span class="reaction" title="${escapeHtml(users.map((u) => u.login).join(", "))}">
+            return `<span class="reaction-chip" title="${escapeHtml(users.map((u) => u.login).join(", "))}">
                       <span class="reaction-emoji">${escapeHtml(emoji)}</span>
                       <span class="reaction-users">${avatars}</span>
                     </span>`;
@@ -576,6 +582,29 @@ function renderReactions(reactions: ReviewCommentReaction[]): string {
         .join("");
 
     return `<div class="comment-reactions">${chips}</div>`;
+}
+
+/**
+ * The reaction picker for a comment. Renders nothing if the viewer cannot react.
+ */
+function renderReactionPicker(comment: ReviewComment): string {
+    if (!comment.viewerCanReact) return "";
+
+    const buttons = REACTIONS.map(
+        (r) => `
+            <button type="button" class="reaction-chip reaction-btn" title="${r.label}"
+                data-comment-id="${escapeHtml(comment.id)}"
+                data-reaction="${r.content}"
+            >${r.emoji}</button>`,
+    ).join("");
+
+    /* U+263A WHITE SMILING FACE, followed by U+FE0E VARIATION SELECTOR-15,
+       which asks for the outline text glyph rather than the colour emoji. */
+    return `
+        <details class="reaction-picker">
+            <summary class="reaction-chip reaction-picker-summary" title="Add a reaction">\u263A\uFE0E＋</summary>
+            <div class="reaction-picker-buttons">${buttons}</div>
+        </details>`;
 }
 
 function renderReviewBadge(state: Review["state"]): string {
