@@ -543,7 +543,7 @@ button.token-clear-btn {
     border: 1px solid var(--yellow-dim);
 }
 
-/* ── Thread ────────────────────────────────────────────────────────────────── */
+/* ── Filters ────────────────────────────────────────────────────────────────── */
 
 .threads-filters {
     margin-bottom: 24px;
@@ -555,6 +555,22 @@ button.token-clear-btn {
     align-items: center;
     min-height: 25px;
 }
+
+.filter-shortcut {
+    background: none;
+    color: var(--accent);
+    border: 1px var(--accent) solid;
+    padding: 5px 8px;
+}
+
+.filter-shortcut:hover {
+    background: none;
+    color: var(--accent-bright);
+    border-color: var(--accent-bright);
+}
+
+
+/* ── Thread ────────────────────────────────────────────────────────────────── */
 
 .thread {
     margin-bottom: 24px;
