@@ -606,13 +606,21 @@ function renderReactionPicker(
 ): string {
     if (!comment.viewerCanReact) return "";
 
-    const buttons = REACTIONS.map(
-        (r) => `
+    const myReactions = new Set(
+        comment.reactions
+            .filter((r) => r.user.login === whoami)
+            .map((r) => r.emoji),
+    );
+
+    const buttons = REACTIONS.map((r) => {
+        const reacted = myReactions.has(r.emoji);
+        return `
             <button type="button" class="reaction-chip reaction-btn" title="${r.label}"
                 data-comment-id="${escapeHtml(comment.id)}"
                 data-reaction="${r.content}"
-            >${r.emoji}</button>`,
-    ).join("");
+                ${reacted ? "disabled" : ""}
+            >${r.emoji}</button>`;
+    }).join("");
 
     /* U+263A WHITE SMILING FACE, followed by U+FE0E VARIATION SELECTOR-15,
        which asks for the outline text glyph rather than the colour emoji. */
