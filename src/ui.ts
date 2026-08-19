@@ -11,7 +11,7 @@ import {
     unresolveReviewThread,
     ReviewCommentReaction,
 } from "./github";
-import { ThreadFilters } from "./threadFilters.ts";
+import { ThreadFilters, ThreadSort } from "./threadFilters.ts";
 
 /** Main entry point */
 export function renderApp(root: HTMLElement): void {
@@ -226,6 +226,18 @@ function renderThreadFilters(threadFilters: ThreadFilters): string {
                     />
                 </div>            
             </div>
+
+            <div class="threads-filters-row">
+                <label>Sort by: </label>
+                <input type="radio" name="sort" id="threads-filters-sort-by-date" value="date"
+                    ${threadFilters.sortOrder == ThreadSort.DATE ? "checked" : ""}
+                />
+                <label for="hreads-filters-sort-by-date">date</label>
+                <input type="radio" name="sort" id="threads-filters-sort-by-line" value="line"
+                    ${threadFilters.sortOrder == ThreadSort.LINE ? "checked" : ""}
+                />
+                <label for="hreads-filters-sort-by-line">line</label>
+            </div>
             
             <div class="threads-filters-row">    
                 <input type="submit" value="Update"/>
@@ -278,6 +290,14 @@ function updateThreadsList(
             "threads-filters-hide-my-resolved-threads",
         ) as HTMLInputElement
     ).checked;
+
+    filter.sortOrder = (
+        document.getElementById(
+            "threads-filters-sort-by-date",
+        ) as HTMLInputElement
+    ).checked
+        ? ThreadSort.DATE
+        : ThreadSort.LINE;
 
     const filtered = filter.apply(threads);
     const html = filtered.map((t) => renderThread(t)).join("");
