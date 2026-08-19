@@ -189,7 +189,7 @@ function renderThreads(
             <span class="section-count" id="thread-comments-count">${filtered.length}</span>
           </h2>
           ${renderThreadFilters(threadFilters)}
-          <div class="threads-list" id="threads-list">${filtered.map(renderThread).join("")}</div>
+          <div class="threads-list" id="threads-list">${filtered.map((t) => renderThread(t, whoami)).join("")}</div>
         </section>
       `;
 }
@@ -348,7 +348,7 @@ function updateThreadsList(
         : ThreadSort.LINE;
 
     const filtered = filter.apply(threads);
-    const html = filtered.map((t) => renderThread(t)).join("");
+    const html = filtered.map((t) => renderThread(t, whoami)).join("");
     document.getElementById("threads-list")!.innerHTML = html;
     document.getElementById("thread-comments-count")!.innerText = String(
         filtered.length,
@@ -358,21 +358,26 @@ function updateThreadsList(
 }
 
 /** Get a complete thread div, including the outer */
-function renderThread(t: CommentThread): string {
+function renderThread(t: CommentThread, whoami: string | null): string {
     return `
         <div class="thread" id="thread-${escapeHtml(t.id)}">
-            ${renderThreadInner(t)}
+            ${renderThreadInner(t, whoami)}
         </div>
     `;
 }
 
 /** Get the inner HTML for a `thread` div */
-function renderThreadInner(thread: CommentThread): string {
+function renderThreadInner(
+    thread: CommentThread,
+    whoami: string | null,
+): string {
     if (thread.comments.length < 1) return "";
 
     const firstComment = thread.comments[0];
     const replies = thread.comments.slice(1);
-    const repliesHtml = replies.map((r) => renderComment(r, true)).join("");
+    const repliesHtml = replies
+        .map((r) => renderComment(r, whoami, true))
+        .join("");
 
     const resolvedBy = thread.resolved_by
         ? `<div class="thread-resolved">
@@ -415,7 +420,7 @@ function renderThreadInner(thread: CommentThread): string {
           </div>
           ${renderDiffHunk(firstComment.diff_hunk, thread.startLine, thread.endLine)}
           <div class="thread-comments">
-            ${renderComment(firstComment)}
+            ${renderComment(firstComment, whoami)}
             <div class="thread-replies">${repliesHtml}</div>
           </div>
           ${replyControl}
@@ -522,7 +527,11 @@ function renderDiffHunk(
     </div>`;
 }
 
-function renderComment(comment: ReviewComment, isReply = false): string {
+function renderComment(
+    comment: ReviewComment,
+    whoami: string | null,
+    isReply = false,
+): string {
     const badge = comment.isPending ? renderReviewBadge("PENDING") : "";
     return `
     <div class="comment ${isReply ? "comment--reply" : ""}">
@@ -535,7 +544,7 @@ function renderComment(comment: ReviewComment, isReply = false): string {
         </a>
       </div>
       <div class="comment-body">${comment.bodyHTML}</div>
-      ${renderCommentReactionsRow(comment)}
+      ${renderCommentReactionsRow(comment, whoami)}
     </div>
   `;
 }
@@ -549,8 +558,11 @@ function renderUser(user: GitHubUser): string {
 }
 
 /** The row below a comment holding its reaction chips and the reaction picker. */
-function renderCommentReactionsRow(comment: ReviewComment): string {
-    const picker = renderReactionPicker(comment);
+function renderCommentReactionsRow(
+    comment: ReviewComment,
+    whoami: string | null,
+): string {
+    const picker = renderReactionPicker(comment, whoami);
     if (comment.reactions.length === 0 && !picker) return "";
     return `<div class="comment-reactions-row">${renderReactions(comment.reactions)}${picker}</div>`;
 }
@@ -588,7 +600,10 @@ function renderReactions(reactions: ReviewCommentReaction[]): string {
 /**
  * The reaction picker for a comment. Renders nothing if the viewer cannot react.
  */
-function renderReactionPicker(comment: ReviewComment): string {
+function renderReactionPicker(
+    comment: ReviewComment,
+    whoami: string | null,
+): string {
     if (!comment.viewerCanReact) return "";
 
     const buttons = REACTIONS.map(
@@ -790,7 +805,10 @@ function addCommentToThread(threadId: string, comment: ReviewComment): void {
     }
 
     const repliesEl = threadEl.getElementsByClassName("thread-replies")[0];
-    repliesEl.append(...htmlToNode(renderComment(comment, true)));
+
+    // TODO: populate `whoami` properly. For now it's ok, because a newly-created
+    //   comment has no reactions, so the viewer's login is moot.
+    repliesEl.append(...htmlToNode(renderComment(comment, null, true)));
 }
 
 /**
