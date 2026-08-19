@@ -8,9 +8,11 @@ import type {
     DiffSide,
     PullRequestReviewComment,
     PullRequestReviewThread,
-    Reaction,
     ReactionContent,
     Repository,
+    ReactionConnection,
+    AddReactionPayload,
+    RemoveReactionPayload,
 } from "@octokit/graphql-schema";
 
 export interface GitHubUser {
@@ -20,6 +22,9 @@ export interface GitHubUser {
 }
 
 export interface ReviewComment {
+    /** The Node ID of the PullRequestReviewComment. */
+    id: string;
+
     user: GitHubUser;
     bodyHTML: string;
     created_at: Date;
@@ -28,6 +33,9 @@ export interface ReviewComment {
     commitSHA: string;
     isPending: boolean;
     reactions: ReviewCommentReaction[];
+
+    /** Whether the viewer is allowed to react to this comment. */
+    viewerCanReact: boolean;
 }
 
 export interface ReviewCommentReaction {
@@ -277,7 +285,7 @@ async function getViewerLogin(octokit: Octokit): Promise<string> {
 }
 
 /** Convert a GraphQL {@link https://docs.github.com/en/graphql/reference/interfaces#actor|Actor} into a
- * {@link GithubUser}.
+ * {@link GitHubUser}.
  */
 function actorToGithubUser(actor: Actor): GitHubUser {
     return {
@@ -339,20 +347,90 @@ export async function replyToReviewThread(
     );
 }
 
+/**
+ * Add the given reaction to a review comment.
+ *
+ * Returns the comment's complete updated list of reactions.
+ */
+export async function addReactionToComment(
+    commentId: string,
+    content: ReactionContent,
+    token: string,
+): Promise<ReviewCommentReaction[]> {
+    const octokit = new Octokit({ auth: token });
+    const resp = await octokit.graphql<{
+        addReaction: AddReactionPayload;
+    }>(
+        `mutation AddReaction($commentId: ID!, $content: ReactionContent!) {
+          addReaction(input: {subjectId: $commentId, content: $content}) {
+            subject {
+               reactions(first:100) {
+                  nodes {
+                    ${reactionsRequest}
+                  }
+               }
+            }
+          }
+        }`,
+        { commentId, content },
+    );
+
+    return buildReactionListFromConnection(resp.addReaction.subject!.reactions);
+}
+
+/**
+ * Remove the viewer's reaction from a review comment.
+ *
+ * Returns the comment's complete updated list of reactions.
+ */
+export async function removeReactionFromComment(
+    commentId: string,
+    content: ReactionContent,
+    token: string,
+): Promise<ReviewCommentReaction[]> {
+    const octokit = new Octokit({ auth: token });
+    const resp = await octokit.graphql<{
+        removeReaction: RemoveReactionPayload;
+    }>(
+        `mutation RemoveReaction($commentId: ID!, $content: ReactionContent!) {
+          removeReaction(input: {subjectId: $commentId, content: $content}) {
+            subject {
+               reactions(first:100) {
+                  nodes {
+                    ${reactionsRequest}
+                  }
+               }
+             }
+          }
+        }`,
+        { commentId, content },
+    );
+
+    return buildReactionListFromConnection(
+        resp.removeReaction.subject!.reactions,
+    );
+}
+
+const reactionsRequest = `
+    content
+    user { login avatarUrl url }
+`;
+
 const reviewCommentRequest = `
     author { login avatarUrl url }
     bodyHTML
     createdAt
     diffHunk
+    id
     originalCommit { abbreviatedOid }
     reactions(first:40) {
       nodes {
-        content
-        user { login avatarUrl url }
+        ${reactionsRequest}
       }
     }
     state
     url
+    viewerCanReact
 `;
 
 const reviewThreadRequestContent = `
@@ -407,12 +485,8 @@ function buildCommentThreadFromResponse(
 function buildReviewCommentFromResponse(
     respComment: PullRequestReviewComment,
 ): ReviewComment {
-    const buildReviewReactionFromResponse = (reaction: Reaction) => ({
-        emoji: reactionToEmoji(reaction.content),
-        user: actorToGithubUser(reaction.user!),
-    });
-
     return {
+        id: respComment.id,
         commitSHA: respComment.originalCommit!.abbreviatedOid,
         bodyHTML: respComment.bodyHTML,
         created_at: new Date(respComment.createdAt),
@@ -420,31 +494,44 @@ function buildReviewCommentFromResponse(
         html_url: respComment.url,
         user: actorToGithubUser(respComment.author!),
         isPending: respComment.state === "PENDING",
-        reactions: respComment.reactions
-            .nodes!.filter((v) => !!v)
-            .map(buildReviewReactionFromResponse),
+        reactions: buildReactionListFromConnection(respComment.reactions),
+        viewerCanReact: respComment.viewerCanReact,
     };
 }
 
+/** Turn the result of a review reaction query, requested via {@link reactionsRequest}, into a {@link ReviewCommentReaction} */
+function buildReactionListFromConnection(
+    reactions: ReactionConnection,
+): ReviewCommentReaction[] {
+    return reactions
+        .nodes!.filter((v) => !!v)
+        .map((reaction) => ({
+            emoji: reactionToEmoji(reaction.content),
+            user: actorToGithubUser(reaction.user!),
+        }));
+}
+
+/** The reactions GitHub supports, in the order its own picker lists them. */
+export const REACTIONS: {
+    content: ReactionContent;
+    emoji: string;
+    label: string;
+}[] = [
+    { content: "THUMBS_UP", emoji: "👍", label: "+1" },
+    { content: "THUMBS_DOWN", emoji: "👎", label: "-1" },
+    { content: "LAUGH", emoji: "😄", label: "Laugh" },
+    { content: "HOORAY", emoji: "🎉", label: "Hooray" },
+    { content: "CONFUSED", emoji: "😕", label: "Confused" },
+    { content: "HEART", emoji: "❤️", label: "Heart" },
+    { content: "ROCKET", emoji: "🚀", label: "Rocket" },
+    { content: "EYES", emoji: "👀", label: "Eyes" },
+];
+
 function reactionToEmoji(reaction: ReactionContent): string {
-    switch (reaction) {
-        case "CONFUSED":
-            return "😕";
-        case "EYES":
-            return "👀";
-        case "HEART":
-            return "❤️";
-        case "HOORAY":
-            return "🎉";
-        case "LAUGH":
-            return "😀";
-        case "ROCKET":
-            return "🚀";
-        case "THUMBS_DOWN":
-            return "👎";
-        case "THUMBS_UP":
-            return "👍";
-        default:
-            return reaction;
+    const r = REACTIONS.find((r) => r.content === reaction);
+    if (r) {
+        return r.emoji;
+    } else {
+        return reaction;
     }
 }

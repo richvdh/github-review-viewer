@@ -10,6 +10,9 @@ import {
     type ReviewComment,
     unresolveReviewThread,
     ReviewCommentReaction,
+    REACTIONS,
+    addReactionToComment,
+    removeReactionFromComment,
 } from "./github";
 import { ThreadFilters, ThreadSort } from "./threadFilters.ts";
 
@@ -47,7 +50,6 @@ function setupHandlers(root: HTMLElement): void {
         loadPullRequest(root, url);
     });
 
-    root.onclick = onClick;
     root.onsubmit = onSubmit;
 }
 
@@ -80,6 +82,7 @@ async function loadPullRequest(root: HTMLElement, prURL: string) {
         const data = await fetchPRData(parsed, getToken() || undefined);
         setOutput(renderResults(data));
         addFilterChangeHooks(data);
+        root.onclick = (e) => onClick(e as PointerEvent, data);
     } catch (err) {
         console.error(err);
         setOutput(`
@@ -187,7 +190,7 @@ function renderThreads(
             <span class="section-count" id="thread-comments-count">${filtered.length}</span>
           </h2>
           ${renderThreadFilters(threadFilters)}
-          <div class="threads-list" id="threads-list">${filtered.map(renderThread).join("")}</div>
+          <div class="threads-list" id="threads-list">${filtered.map((t) => renderThread(t, whoami)).join("")}</div>
         </section>
       `;
 }
@@ -346,7 +349,7 @@ function updateThreadsList(
         : ThreadSort.LINE;
 
     const filtered = filter.apply(threads);
-    const html = filtered.map((t) => renderThread(t)).join("");
+    const html = filtered.map((t) => renderThread(t, whoami)).join("");
     document.getElementById("threads-list")!.innerHTML = html;
     document.getElementById("thread-comments-count")!.innerText = String(
         filtered.length,
@@ -356,21 +359,26 @@ function updateThreadsList(
 }
 
 /** Get a complete thread div, including the outer */
-function renderThread(t: CommentThread): string {
+function renderThread(t: CommentThread, whoami: string | null): string {
     return `
         <div class="thread" id="thread-${escapeHtml(t.id)}">
-            ${renderThreadInner(t)}
+            ${renderThreadInner(t, whoami)}
         </div>
     `;
 }
 
 /** Get the inner HTML for a `thread` div */
-function renderThreadInner(thread: CommentThread): string {
+function renderThreadInner(
+    thread: CommentThread,
+    whoami: string | null,
+): string {
     if (thread.comments.length < 1) return "";
 
     const firstComment = thread.comments[0];
     const replies = thread.comments.slice(1);
-    const repliesHtml = replies.map((r) => renderComment(r, true)).join("");
+    const repliesHtml = replies
+        .map((r) => renderComment(r, whoami, true))
+        .join("");
 
     const resolvedBy = thread.resolved_by
         ? `<div class="thread-resolved">
@@ -413,7 +421,7 @@ function renderThreadInner(thread: CommentThread): string {
           </div>
           ${renderDiffHunk(firstComment.diff_hunk, thread.startLine, thread.endLine)}
           <div class="thread-comments">
-            ${renderComment(firstComment)}
+            ${renderComment(firstComment, whoami)}
             <div class="thread-replies">${repliesHtml}</div>
           </div>
           ${replyControl}
@@ -520,7 +528,11 @@ function renderDiffHunk(
     </div>`;
 }
 
-function renderComment(comment: ReviewComment, isReply = false): string {
+function renderComment(
+    comment: ReviewComment,
+    whoami: string | null,
+    isReply = false,
+): string {
     const badge = comment.isPending ? renderReviewBadge("PENDING") : "";
     return `
     <div class="comment ${isReply ? "comment--reply" : ""}">
@@ -533,7 +545,7 @@ function renderComment(comment: ReviewComment, isReply = false): string {
         </a>
       </div>
       <div class="comment-body">${comment.bodyHTML}</div>
-      ${renderReactions(comment.reactions)}
+      ${renderCommentReactionsRow(comment, whoami)}
     </div>
   `;
 }
@@ -546,10 +558,18 @@ function renderUser(user: GitHubUser): string {
         </a>`;
 }
 
+/** The row below a comment holding its reaction chips and the reaction picker. */
+function renderCommentReactionsRow(
+    comment: ReviewComment,
+    whoami: string | null,
+): string {
+    const picker = renderReactionPicker(comment, whoami);
+    if (comment.reactions.length === 0 && !picker) return "";
+    return `<div class="comment-reactions-row">${renderReactions(comment.reactions)}${picker}</div>`;
+}
+
 /** Render a comment's reactions as a row of emoji + reactor-avatar chips. */
 function renderReactions(reactions: ReviewCommentReaction[]): string {
-    if (reactions.length === 0) return "";
-
     // Group by emoji, preserving first-seen order.
     const groups = new Map<string, GitHubUser[]>();
     for (const r of reactions) {
@@ -568,7 +588,7 @@ function renderReactions(reactions: ReviewCommentReaction[]): string {
                          </a>`,
                 )
                 .join("");
-            return `<span class="reaction" title="${escapeHtml(users.map((u) => u.login).join(", "))}">
+            return `<span class="reaction-chip" title="${escapeHtml(users.map((u) => u.login).join(", "))}">
                       <span class="reaction-emoji">${escapeHtml(emoji)}</span>
                       <span class="reaction-users">${avatars}</span>
                     </span>`;
@@ -576,6 +596,40 @@ function renderReactions(reactions: ReviewCommentReaction[]): string {
         .join("");
 
     return `<div class="comment-reactions">${chips}</div>`;
+}
+
+/**
+ * The reaction picker for a comment. Renders nothing if the viewer cannot react.
+ */
+function renderReactionPicker(
+    comment: ReviewComment,
+    whoami: string | null,
+): string {
+    if (!comment.viewerCanReact) return "";
+
+    const myReactions = new Set(
+        comment.reactions
+            .filter((r) => r.user.login === whoami)
+            .map((r) => r.emoji),
+    );
+
+    const buttons = REACTIONS.map((r) => {
+        const reacted = myReactions.has(r.emoji);
+        return `
+            <button type="button" class="reaction-chip reaction-btn" title="${r.label}"
+                aria-pressed="${reacted}"
+                data-comment-id="${escapeHtml(comment.id)}"
+                data-reaction="${r.content}"
+            >${r.emoji}</button>`;
+    }).join("");
+
+    /* U+263A WHITE SMILING FACE, followed by U+FE0E VARIATION SELECTOR-15,
+       which asks for the outline text glyph rather than the colour emoji. */
+    return `
+        <details class="reaction-picker">
+            <summary class="reaction-chip reaction-picker-summary" title="Add a reaction">\u263A\uFE0E＋</summary>
+            <div class="reaction-picker-buttons">${buttons}</div>
+        </details>`;
 }
 
 function renderReviewBadge(state: Review["state"]): string {
@@ -662,30 +716,76 @@ function showTokenPanel(root: HTMLElement): void {
     tokenToggle.onclick = () => hideTokenPanel();
 }
 
-/** Root-level `click` handler. Handles the resolve/unresolve buttons */
-async function onClick(e: PointerEvent): Promise<void> {
+/** Root-level `click` handler. Handles the resolve/unresolve buttons, and the reaction buttons */
+async function onClick(e: PointerEvent, data: PRData): Promise<void> {
     const token = getToken();
     if (!token) return;
 
     const target = e.target as HTMLElement;
 
     if (target.classList.contains("resolve-btn")) {
-        const btn = target as HTMLButtonElement;
-        const threadId = btn.dataset.threadId;
-        if (!threadId) return;
-        const action = btn.dataset.action;
+        await onResolveButtonClick(target, token);
+    } else if (target.classList.contains("reaction-btn")) {
+        await onReactionButtonClick(target, token, data);
+    }
+}
 
-        btn.disabled = true;
-        try {
-            if (action === "resolve") {
-                await resolveReviewThread(threadId, token);
-            } else if (action === "unresolve") {
-                await unresolveReviewThread(threadId, token);
-            }
-        } catch (e) {
-            btn.disabled = false;
-            alert(e);
+async function onResolveButtonClick(target: HTMLElement, token: string) {
+    const btn = target as HTMLButtonElement;
+    const threadId = btn.dataset.threadId;
+    if (!threadId) return;
+    const action = btn.dataset.action;
+
+    btn.disabled = true;
+    try {
+        if (action === "resolve") {
+            await resolveReviewThread(threadId, token);
+        } else if (action === "unresolve") {
+            await unresolveReviewThread(threadId, token);
         }
+    } catch (e) {
+        btn.disabled = false;
+        alert(e);
+    }
+}
+
+async function onReactionButtonClick(
+    target: HTMLElement,
+    token: string,
+    data: PRData,
+) {
+    const btn = target as HTMLButtonElement;
+
+    // Find the right comment in the data.
+    const commentId = btn.dataset.commentId;
+    const comment = data.threads
+        .flatMap((t) => t.comments)
+        .find((c) => c.id === commentId);
+    if (!comment) return;
+
+    // Look the reaction up rather than casting, so a bad attribute can't
+    // reach the API.
+    const reaction = REACTIONS.find((r) => r.content === btn.dataset.reaction);
+    if (!reaction) return;
+
+    // Figure out if we're reacting or unreacting.
+    const alreadyReacted = btn.getAttribute("aria-pressed") === "true";
+    const mutate = alreadyReacted
+        ? removeReactionFromComment
+        : addReactionToComment;
+
+    btn.disabled = true;
+    try {
+        // Update the model with new reaction data.
+        comment.reactions = await mutate(comment.id, reaction.content, token);
+
+        // re-render the reactions row
+        const row = btn.closest(".comment-reactions-row");
+        if (row)
+            row.outerHTML = renderCommentReactionsRow(comment, data.whoami);
+    } catch (e) {
+        btn.disabled = false;
+        alert(e);
     }
 }
 
@@ -731,7 +831,10 @@ function addCommentToThread(threadId: string, comment: ReviewComment): void {
     }
 
     const repliesEl = threadEl.getElementsByClassName("thread-replies")[0];
-    repliesEl.append(...htmlToNode(renderComment(comment, true)));
+
+    // TODO: populate `whoami` properly. For now it's ok, because a newly-created
+    //   comment has no reactions, so the viewer's login is moot.
+    repliesEl.append(...htmlToNode(renderComment(comment, null, true)));
 }
 
 function htmlToNode(html: string): NodeListOf<ChildNode> {
