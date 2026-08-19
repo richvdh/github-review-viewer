@@ -9,6 +9,7 @@ import {
     type Review,
     type ReviewComment,
     unresolveReviewThread,
+    ReviewCommentReaction,
 } from "./github";
 import { ThreadFilters } from "./threadFilters.ts";
 
@@ -466,6 +467,7 @@ function renderComment(comment: ReviewComment, isReply = false): string {
         </a>
       </div>
       <div class="comment-body">${comment.bodyHTML}</div>
+      ${renderReactions(comment.reactions)}
     </div>
   `;
 }
@@ -476,6 +478,38 @@ function renderUser(user: GitHubUser): string {
           <img src="${user.avatar_url}&s=40" alt="${escapeHtml(user.login)}" class="avatar" width="20" height="20" />
           <span class="username">${escapeHtml(user.login)}</span>
         </a>`;
+}
+
+/** Render a comment's reactions as a row of emoji + reactor-avatar chips. */
+function renderReactions(reactions: ReviewCommentReaction[]): string {
+    if (reactions.length === 0) return "";
+
+    // Group by emoji, preserving first-seen order.
+    const groups = new Map<string, GitHubUser[]>();
+    for (const r of reactions) {
+        const users = groups.get(r.emoji);
+        if (users) users.push(r.user);
+        else groups.set(r.emoji, [r.user]);
+    }
+
+    const chips = [...groups]
+        .map(([emoji, users]) => {
+            const avatars = users
+                .map(
+                    (u) =>
+                        `<a href="${escapeHtml(u.html_url)}" target="_blank" rel="noopener" title="${escapeHtml(u.login)}">
+                           <img src="${escapeHtml(u.avatar_url)}&s=32" alt="${escapeHtml(u.login)}" class="avatar reaction-avatar" width="16" height="16" />
+                         </a>`,
+                )
+                .join("");
+            return `<span class="reaction" title="${escapeHtml(users.map((u) => u.login).join(", "))}">
+                      <span class="reaction-emoji">${escapeHtml(emoji)}</span>
+                      <span class="reaction-users">${avatars}</span>
+                    </span>`;
+        })
+        .join("");
+
+    return `<div class="comment-reactions">${chips}</div>`;
 }
 
 function renderReviewBadge(state: Review["state"]): string {

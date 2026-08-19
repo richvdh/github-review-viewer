@@ -8,6 +8,8 @@ import type {
     DiffSide,
     PullRequestReviewComment,
     PullRequestReviewThread,
+    Reaction,
+    ReactionContent,
     Repository,
 } from "@octokit/graphql-schema";
 
@@ -25,6 +27,12 @@ export interface ReviewComment {
     diff_hunk: string;
     commitSHA: string;
     isPending: boolean;
+    reactions: ReviewCommentReaction[];
+}
+
+export interface ReviewCommentReaction {
+    emoji: string;
+    user: GitHubUser;
 }
 
 export interface Review {
@@ -337,6 +345,12 @@ const reviewCommentRequest = `
     createdAt
     diffHunk
     originalCommit { abbreviatedOid }
+    reactions(first:40) {
+      nodes {
+        content
+        user { login avatarUrl url }
+      }
+    }
     state
     url
 `;
@@ -393,6 +407,11 @@ function buildCommentThreadFromResponse(
 function buildReviewCommentFromResponse(
     respComment: PullRequestReviewComment,
 ): ReviewComment {
+    const buildReviewReactionFromResponse = (reaction: Reaction) => ({
+        emoji: reactionToEmoji(reaction.content),
+        user: actorToGithubUser(reaction.user!),
+    });
+
     return {
         commitSHA: respComment.originalCommit!.abbreviatedOid,
         bodyHTML: respComment.bodyHTML,
@@ -401,5 +420,31 @@ function buildReviewCommentFromResponse(
         html_url: respComment.url,
         user: actorToGithubUser(respComment.author!),
         isPending: respComment.state === "PENDING",
+        reactions: respComment.reactions
+            .nodes!.filter((v) => !!v)
+            .map(buildReviewReactionFromResponse),
     };
+}
+
+function reactionToEmoji(reaction: ReactionContent): string {
+    switch (reaction) {
+        case "CONFUSED":
+            return "😕";
+        case "EYES":
+            return "👀";
+        case "HEART":
+            return "❤️";
+        case "HOORAY":
+            return "🎉";
+        case "LAUGH":
+            return "😀";
+        case "ROCKET":
+            return "🚀";
+        case "THUMBS_DOWN":
+            return "👎";
+        case "THUMBS_UP":
+            return "👍";
+        default:
+            return reaction;
+    }
 }
