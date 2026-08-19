@@ -774,6 +774,36 @@ details[open] > .diff-summary::before {
     border-left: 2px solid var(--border);
 }
 
+.comment-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.reaction {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface-3);
+    font-size: 0.75rem;
+    line-height: 1.4;
+}
+
+.reaction-users {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+}
+
+.reaction-avatar {
+    display: block;
+    border-radius: 50%;
+}
+
 /* ── Github User ────────────────────────────────────────────────────────────── */
 
 .github-user {
