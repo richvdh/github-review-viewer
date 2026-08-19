@@ -214,6 +214,9 @@ function renderThreadFilters(threadFilters: ThreadFilters): string {
                     value="${threadFilters.myLastCommentDate ? escapeHtml(threadFilters.myLastCommentDate) : ""}" 
                     ${disableMyUserFilters ? "disabled" : ""}
                 />
+                <button type="button" class="filter-shortcut" id="threads-filters-my-last-review" ${disableMyUserFilters ? "hidden" : ""}>
+                    my last review
+                </button>
                 <label>... and which:</label>
             </div>
 
@@ -249,11 +252,54 @@ function renderThreadFilters(threadFilters: ThreadFilters): string {
 
 /** Called after rendering to add listeners to the filters to rerender */
 function addFilterChangeHooks(data: PRData): void {
-    const callback = () => updateThreadsList(data.whoami, data.threads);
-    document.getElementById("threads-filters-form")!.onsubmit = (e) => {
+    const threadsForm = document.getElementById("threads-filters-form");
+    if (!threadsForm) {
+        // Form not rendered. Probably no threads in this PR.
+        return;
+    }
+
+    threadsForm.onsubmit = (e) => {
         e.preventDefault();
-        callback();
+        updateThreadsList(data.whoami, data.threads);
     };
+
+    const lastReviewDate = myLastReviewDate(data);
+    const lastReviewButton = document.getElementById(
+        "threads-filters-my-last-review",
+    ) as HTMLButtonElement;
+    if (lastReviewDate) {
+        lastReviewButton.hidden = false;
+        lastReviewButton.onclick = () => {
+            (
+                document.getElementById(
+                    "threads-filters-my-last-comment",
+                ) as HTMLInputElement
+            ).value = lastReviewDate.toISOString().slice(0, 10);
+        };
+    } else {
+        lastReviewButton.hidden = true;
+    }
+}
+
+/**
+ * The date of the most recent review submitted by the logged-in user, or `null` if there is no such review.
+ */
+function myLastReviewDate(data: PRData): Date | null {
+    if (!data.whoami) return null;
+
+    let latest: Date | null = null;
+    for (const r of data.reviews) {
+        // Pending reviews have not been submitted, so have no date.
+        if (r.user.login !== data.whoami || !r.submitted_at) continue;
+
+        // Only actual review reviews, not just replies to existing comments
+        if (r.state === "COMMENTED" && !r.bodyHTML) continue;
+
+        const submitted = new Date(r.submitted_at);
+        if (!latest || submitted > latest) latest = submitted;
+    }
+
+    return latest;
 }
 
 /**
