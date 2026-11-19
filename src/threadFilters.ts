@@ -59,9 +59,15 @@ function compareThreadsByDate(a: CommentThread, b: CommentThread) {
 }
 
 function compareThreadsByLine(a: CommentThread, b: CommentThread) {
-    const aLine = a.startLine ?? a.endLine;
-    const bLine = b.startLine ?? b.endLine;
-    return aLine - bLine;
+    if (a.path < b.path) {
+        return -1;
+    } else if (a.path > b.path) {
+        return 1;
+    } else {
+        const aLine = a.startLine ?? a.endLine;
+        const bLine = b.startLine ?? b.endLine;
+        return aLine - bLine;
+    }
 }
 
 export enum ThreadSort {
